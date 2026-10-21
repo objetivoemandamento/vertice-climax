@@ -33,7 +33,7 @@ export function classifyIncomingMessage(messageText, currentStage = "inicio") {
     return {
       action: "reply",
       stage: "Descoberta",
-      reply: "O Instagram é ótimo para mostrar os trabalhos. Quando alguém gosta de um serviço, costuma encontrar ali todas as informações e opções, ou vocês ainda precisam explicar alguns detalhes e enviar fotos pelo WhatsApp?"
+      reply: "O Instagram é ótimo para mostrar os trabalhos. A pessoa costuma chegar sabendo qual serviço quer, ou vocês ainda precisam explicar as opções e enviar fotos pelo WhatsApp?"
     };
   }
 
