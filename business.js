@@ -52,7 +52,7 @@ function render(){
     const actions=element("td");const stack=element("div","row-actions");
     stack.append(button("Selecionar demonstração","",()=>selectDemo(l.id)));
     stack.append(button("Editar","",()=>editLead(l.id)));
-    if(["Pago","Site entregue"].includes(l.stage)){const project=hubProjects.find(item=>item.leadId===l.id);stack.append(button(project?"Abrir projeto":"Criar projeto","",()=>{if(project)window.open("./index.html?project="+encodeURIComponent(project.id),"_blank","noopener");else void createProjectFromLead(l.id)}));}
+    if(["Pago","Site entregue"].includes(l.stage)){const project=hubProjects.find(item=>item.leadId===l.id);stack.append(button(project?"Abrir projeto":"Criar projeto","",()=>{if(project)window.location.href="./index.html?project="+encodeURIComponent(project.id);else void createProjectFromLead(l.id)}));}
     stack.append(button("Abrir Maps","",()=>openMaps(l)));
     if(l.consent&&l.consentEvidence&&!l.doNotContact&&l.stage!=="Sem interesse"&&normalizedPhone(l.whatsapp)){
       const a=element("a","button","Abrir WhatsApp");a.href="https://wa.me/"+normalizedPhone(l.whatsapp);a.target="_blank";a.rel="noopener noreferrer";a.title="Abre o contato; não envia mensagem automaticamente";stack.append(a);
@@ -116,7 +116,7 @@ async function createProjectFromLead(id){
     const payload={leads:mergeById(leads,remote.leads),projects:mergeById(hubProjects,remote.projects),workspaces:remote.workspaces||{},workspaceUpdatedAt:remote.workspaceUpdatedAt||{}};
     await agentRequest("/api/hub/state",{method:"PUT",body:JSON.stringify(payload)});
     toast("Projeto criado no núcleo. Abrindo workspace…");
-    window.open("./index.html?project="+encodeURIComponent(project.id),"_blank","noopener");
+    window.location.href="./index.html?project="+encodeURIComponent(project.id);
   }catch(e){hubProjects=hubProjects.filter(item=>item.id!==project.id);try{localStorage.setItem(PROJECT_STORE,JSON.stringify(hubProjects))}catch{}toast("Falha ao criar projeto no núcleo: "+e.message)}
 }
 function selectDemo(id){activeDemoId=id;updateDemo()}
