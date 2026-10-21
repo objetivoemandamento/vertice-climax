@@ -354,6 +354,9 @@ app.post("/api/automation/contacts", (req, res) => {
   if (consent !== true) return res.status(400).json({ error: "É necessário registrar autorização válida antes de ativar respostas automáticas" });
   if (typeof consentEvidence !== "string" || !consentEvidence.trim() || consentEvidence.length > 500) return res.status(400).json({ error: "Registre a data ou referência da autorização" });
   const old = automationContacts.get(chatId) || {};
+  if (old.consent === false && old.consentEvidence && consentEvidence.trim() === old.consentEvidence) {
+    return res.status(409).json({ error: "Após desativação ou recusa, registre uma nova autorização verificável antes de reativar o contato." });
+  }
   const contact = {
     ...old,
     chatId,
