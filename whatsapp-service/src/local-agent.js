@@ -45,7 +45,7 @@ export function classifyIncomingMessage(messageText, currentStage = "inicio") {
     };
   }
 
-  if (/\b(ja temos site|temos um site|nosso site|site ja existe)\b/.test(text)) {
+  if (/\b(ja temos site|temos um site|ja tenho um site|ja tenho site|temos site|nosso site|site ja existe)\b/.test(text)) {
     return {
       action: "reply",
       stage: "Descoberta",
