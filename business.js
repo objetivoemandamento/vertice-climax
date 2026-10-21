@@ -137,7 +137,7 @@ async function checkClientSiteStatus(projectId,leadId){
   try{
     const result=await agentRequest("/api/projects/"+encodeURIComponent(projectId)+"/publish-status");
     project.publicUrl=result.publicUrl||project.publicUrl;project.publishStatus=result.publishStatus;project.publishError=result.error||null;
-    if(result.publishStatus==="ready"){lead.websiteUrl=project.publicUrl;if(!lead.doNotContact)lead.stage="Site entregue";lead.updatedAt=new Date().toISOString();persist();render();window.open(project.publicUrl,"_blank","noopener,noreferrer");toast("Site publicado e confirmado pela Vercel.");}
+    if(result.publishStatus==="ready"){lead.websiteUrl=project.publicUrl;if(!lead.doNotContact)lead.stage="Site entregue";lead.updatedAt=new Date().toISOString();persist();render();window.location.assign(project.publicUrl);}
     else if(result.publishStatus==="error"){persist();render();toast("A hospedagem informou falha. Revise os arquivos e tente novamente.");}
     else{persist();render();toast("Publicação ainda em andamento: "+result.publishStatus+". Verifique novamente em alguns segundos.");}
   }catch(e){toast("Não foi possível verificar a publicação: "+e.message)}
@@ -151,7 +151,7 @@ async function publishClientSite(projectId,leadId){
     project.publicUrl=result.publicUrl;project.vercelDeploymentId=result.deploymentId;project.publishStatus=result.publishStatus;lead.websiteUrl=result.publicUrl;lead.updatedAt=new Date().toISOString();
     if(result.publishStatus==="ready"){project.publishedAt=new Date().toISOString();lead.websitePublishedAt=project.publishedAt;if(!lead.doNotContact)lead.stage="Site entregue";}
     persist();render();
-    if(result.publishStatus==="ready"){window.open(result.publicUrl,"_blank","noopener,noreferrer");toast("Site publicado e confirmado pela Vercel.");}
+    if(result.publishStatus==="ready"){window.location.assign(result.publicUrl);}
     else toast("Publicação iniciada. Status do provedor: "+result.publishStatus+". Use Verificar publicação em alguns segundos.");
   }catch(e){toast("Não foi possível publicar: "+e.message)}
 }
