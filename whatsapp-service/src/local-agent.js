@@ -4,7 +4,7 @@ export function classifyIncomingMessage(messageText, currentStage = "inicio") {
   const text = normalize(messageText);
   if (!text) return { action: "human_review", stage: currentStage, reason: "Mensagem sem texto reconhecível" };
 
-  const optOut = /\b(nao tenho interesse|sem interesse|nao me chame|nao me contate|pare de mandar|pare de enviar|remova meu contato|remover meu contato|nao quero receber|stop|sair da lista)\b/.test(text);
+  const optOut = /\b(nao tenho interesse|sem interesse|nao me chame|nao me contate|nao me mande|nao mande mais|nao envie mais|pare|parar|pare de mandar|pare de enviar|remova meu contato|remover meu contato|me tire da lista|nao quero receber|stop|sair da lista)\b/.test(text);
   if (optOut) {
     return {
       action: "opt_out",
