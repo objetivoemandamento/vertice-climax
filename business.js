@@ -96,15 +96,8 @@ function saveLead(e){
 }
 function deleteLead(id){
   const l=leads.find(x=>x.id===id);if(!l||!confirm("Excluir "+l.name+" deste navegador?"))return;
-  leads=leads.filter(x=>x.id!==id);if(activeDemoId===id)activeDemoId=null;persist();$("#agent-service-url").value=localStorage.getItem(AGENT_URL_KEY)||DEFAULT_AGENT_URL;
-$("#agent-token").value=sessionStorage.getItem(AGENT_TOKEN_KEY)||"";
-$("#agent-save").addEventListener("click",async()=>{
-  const url=$("#agent-service-url").value.trim().replace(/\\/+$/,""),token=$("#agent-token").value.trim();
-  if(!url||!token){$("#agent-connect-status").textContent="Informe a URL e o token.";return}
-  localStorage.setItem(AGENT_URL_KEY,url);sessionStorage.setItem(AGENT_TOKEN_KEY,token);
-  await checkAgentHealth();
-});
-render();updateDemo();toast("Registro excluído");
+  leads=leads.filter(x=>x.id!==id);if(activeDemoId===id)activeDemoId=null;persist();render();updateDemo();toast("Registro excluído");
+}
 }
 function selectDemo(id){activeDemoId=id;updateDemo()}
 function updateDemo(){
@@ -136,7 +129,7 @@ async function importBackup(e){
 }
 function safeHttpUrl(value){const v=String(value||"").trim();const lower=v.toLowerCase();return lower.startsWith("https://")||lower.startsWith("http://")?esc(v):""}
 async function agentRequest(path,options={}){
-  const base=($("#agent-service-url").value||"").trim().replace(/\\/+$/,"");
+  const raw=($("#agent-service-url").value||"").trim();let base=raw;while(base.endsWith("/"))base=base.slice(0,-1);
   const token=$("#agent-token").value.trim();
   if(!base)throw Error("Informe a URL do serviço WhatsApp.");
   if(!token)throw Error("Informe o token do serviço.");
@@ -183,6 +176,14 @@ $("#generate-demo").addEventListener("click",()=>{
   const l=leads.find(x=>x.id===activeDemoId);if(!l)return;
   const html=demoHtml(l);download(new Blob([html],{type:"text/html;charset=utf-8"}),"demo-"+l.name.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")+".html");
   toast("Demonstração HTML criada. Ela ainda não está hospedada.");
+});
+$("#agent-service-url").value=localStorage.getItem(AGENT_URL_KEY)||DEFAULT_AGENT_URL;
+$("#agent-token").value=sessionStorage.getItem(AGENT_TOKEN_KEY)||"";
+$("#agent-save").addEventListener("click",async()=>{
+  const urlRaw=$("#agent-service-url").value.trim();let url=urlRaw;while(url.endsWith("/"))url=url.slice(0,-1);const token=$("#agent-token").value.trim();
+  if(!url||!token){$("#agent-connect-status").textContent="Informe a URL e o token.";return}
+  localStorage.setItem(AGENT_URL_KEY,url);sessionStorage.setItem(AGENT_TOKEN_KEY,token);
+  await checkAgentHealth();
 });
 render();updateDemo();
 })();
