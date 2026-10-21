@@ -55,9 +55,9 @@ Abra `whatsapp.html`, informe a URL HTTPS ou local do serviço e o mesmo token. 
 
 ### Persistência e hospedagem
 
-O serviço salva as credenciais da sessão em `DATA_DIR/auth` e o cache de conversas/mensagens em `DATA_DIR/store.json`, usando escrita temporária e renomeação para reduzir o risco de corrupção. Configure um disco persistente no provedor de hospedagem e defina `DATA_DIR` para o caminho montado. Em hospedagem gratuita sem disco persistente, uma nova implantação pode apagar a sessão e exigir novo pareamento.
+O serviço grava as credenciais Baileys em `DATA_DIR/auth` e, quando Supabase + `HUB_DB_SECRET` estão configurados, sincroniza essas credenciais criptografadas para que possam ser restauradas após reinicializações. O primeiro pareamento ainda exige escanear o QR Code no WhatsApp do proprietário. O cache de conversas e mensagens fica em `DATA_DIR/store.json` e pode ser perdido em hospedagem sem disco persistente; ele não representa o histórico completo do WhatsApp.
 
-Não exponha a pasta de dados, o arquivo `.env` ou o token. Faça backups protegidos se precisar preservar a sessão. O cache é limitado e não representa garantia de histórico completo de conversas antigas.
+Não exponha a pasta de dados, o arquivo `.env`, o token de serviço ou as credenciais de sessão. O envio é individual, exige aprovação explícita e deve respeitar consentimento e recusas.
 
 ### Agente local de respostas
 
@@ -91,17 +91,19 @@ Todas as rotas em `/api` exigem `Authorization: Bearer VERTICE_SERVICE_TOKEN`.
 
 O envio possui validação, limite de taxa e aprovação explícita. Não é um mecanismo de disparo em massa. Utilize apenas para conversas autorizadas, respeite recusas e políticas aplicáveis. A automação não oficial pode gerar restrições à conta.
 
-## Painel comercial local\n\nAbra `business.html` para cadastrar empresas, manter etapas comerciais, registrar autorização de contato, consultar os pacotes Básico (R$ 300), Médio (R$ 700) e Avançado (R$ 2.000), exportar CSV, criar backups JSON e gerar uma demonstração HTML local. Os registros ficam no `localStorage` do navegador; exporte backups para evitar perda de dados. A demonstração HTML não é hospedagem pública e não deve ser apresentada como site publicado. A pesquisa do Google Maps é aberta no navegador para consulta; a coleta automática em escala ainda não está implementada.\n\n## Studio de programação
+## Painel comercial e Studio
 
-O editor web permite criar e editar arquivos no navegador, pré-visualizar HTML/CSS/JavaScript e exportar o workspace em ZIP. O workspace fica no armazenamento local do navegador; exporte backups para não perder os arquivos.
+Abra `business.html` para gerenciar leads, etapas comerciais, consentimento e pacotes Básico (R$ 300), Médio (R$ 700) e Avançado (R$ 2.000). Com o núcleo conectado, os dados são sincronizados com o backend e o Supabase. Após registrar a proposta, o CRM pode gerar um link do Mercado Pago; o webhook valida o pagamento e, após a confirmação real, marca o lead como pago e cria automaticamente o projeto e o workspace inicial.
 
-A versão atual do Studio ainda possui geração de código via API OpenAI no frontend. Isso requer chave de API e não é equivalente a um modelo local. Não publique o frontend para uso multiusuário com segredos no navegador. A remoção dessa dependência exige substituir a geração por regras/templates locais ou integrar um modelo executado localmente.
+O editor web permite editar e pré-visualizar HTML/CSS/JavaScript, sincronizar o workspace com o núcleo e exportar ZIP. A geração por API OpenAI ainda requer uma chave de API separada, configurada no navegador; uma assinatura ChatGPT não substitui essa chave.
+
+A publicação via Vercel está implementada com bloqueio por pagamento confirmado e confirmação explícita de revisão do conteúdo. Para ativá-la, configure `VERCEL_TOKEN` no backend; `VERCEL_TEAM_ID` é opcional. Para ativar cobranças, configure `MERCADOPAGO_ACCESS_TOKEN` e `MERCADOPAGO_WEBHOOK_SECRET`. Sem essas credenciais, as integrações ficam desativadas. Domínios próprios continuam a exigir configuração no provedor.
 
 ## Limitações importantes
 
 - Um QR Code real só aparece quando o conector recebe um QR da sessão.
 - O serviço precisa permanecer ativo para receber mensagens em tempo real.
-- Sem armazenamento persistente no servidor, credenciais e cache podem ser perdidos em novas implantações.
+- Sem Supabase configurado, a sessão do WhatsApp permanece local e pode exigir novo pareamento; o cache de mensagens continua local mesmo com a sessão criptografada no Supabase.
 - O cache de mensagens inclui eventos recebidos durante a execução e não garante sincronização de todo o histórico antigo.
-- A conexão Baileys não é uma integração oficial da Meta.
+- A publicação Vercel e a cobrança Mercado Pago só funcionam após configurar as credenciais no backend; a publicação exige aprovação explícita do conteúdo.\n- A conexão Baileys não é uma integração oficial da Meta.
 - O envio de mensagens deve respeitar consentimento, privacidade e políticas da plataforma.

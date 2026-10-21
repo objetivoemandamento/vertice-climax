@@ -561,7 +561,8 @@ app.get("/health", (_req, res) => res.json({
   hubWorkspaces: Object.keys(hubState.workspaces).length,
   hubUpdatedAt: hubState.updatedAt,
   whatsappAuthPersistence: hubDbReady ? "supabase-encrypted" : "local-only",
-  paymentIntegrationConfigured: Boolean(MP_ACCESS_TOKEN && MP_WEBHOOK_SECRET)
+  paymentIntegrationConfigured: Boolean(MP_ACCESS_TOKEN && MP_WEBHOOK_SECRET),
+  websitePublishingConfigured: Boolean(VERCEL_TOKEN)
 }));
 
 app.post("/webhooks/mercadopago", async (req, res) => {

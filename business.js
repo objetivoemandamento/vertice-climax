@@ -284,7 +284,7 @@ async function refreshPendingPayments(){
 }
 async function checkAgentHealth(){
   const status=$("#agent-connect-status");
-  try{const d=await agentRequest("/api/status");const wa=d.connected?"WhatsApp conectado. Agente: "+(d.automationEnabled?"ativo":"desativado")+".":"Serviço acessível; WhatsApp ainda não conectado.";const payments=d.paymentIntegrationConfigured?"Mercado Pago configurado.":"Mercado Pago pendente de credenciais no backend.";const persistence=d.whatsappAuthPersistence==="supabase-encrypted"?"Persistência criptografada configurada.":"Sessão apenas local; reinícios podem exigir novo pareamento.";status.textContent=[wa,payments,persistence].join(" ")}
+  try{const d=await agentRequest("/api/status");const wa=d.connected?"WhatsApp conectado. Agente: "+(d.automationEnabled?"ativo":"desativado")+".":"Serviço acessível; WhatsApp ainda não conectado.";const payments=d.paymentIntegrationConfigured?"Mercado Pago configurado.":"Mercado Pago pendente de credenciais no backend.";const persistence=d.whatsappAuthPersistence==="supabase-encrypted"?"Persistência criptografada configurada.":"Sessão apenas local; reinícios podem exigir novo pareamento.";const publishing=d.websitePublishingConfigured?"Publicação Vercel configurada.":"Publicação Vercel pendente de token no backend.";status.textContent=[wa,payments,persistence,publishing].join(" ")}
   catch(e){status.textContent="Conexão não validada: "+e.message}
 }
 async function registerLeadWithAgent(id){
