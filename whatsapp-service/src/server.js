@@ -21,6 +21,12 @@ const MESSAGE_LIMIT = Math.max(50, Math.min(2000, Number(process.env.MESSAGE_CAC
 const CHAT_LIMIT = Math.max(50, Math.min(5000, Number(process.env.CHAT_CACHE_LIMIT || 1000)));
 const origins = (process.env.FRONTEND_ORIGIN || "").split(",").map(s => s.trim()).filter(Boolean);
 
+const SUPABASE_URL = (process.env.SUPABASE_URL || "").replace(/\/$/, "");
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || "";
+const HUB_DB_SECRET = process.env.HUB_DB_SECRET || "";
+const hubDbReady = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY && HUB_DB_SECRET);
+
+
 if (TOKEN.length < 24 || TOKEN.includes("troque-por")) {
   console.error("Configure VERTICE_SERVICE_TOKEN com um segredo aleatório de pelo menos 24 caracteres.");
   process.exit(1);
@@ -64,6 +70,62 @@ const hubState = { version: 1, updatedAt: null, leads: [], projects: [], workspa
 function safeString(value, max = 10000) {
   return typeof value === "string" ? value.slice(0, max) : "";
 }
+
+async function hubDbRpc(name, payload) {
+  if (!hubDbReady) throw new Error("Banco central não configurado");
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${name}`, {
+    method: "POST",
+    headers: {
+      "apikey": SUPABASE_ANON_KEY,
+      "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ ...payload, p_secret: HUB_DB_SECRET })
+  });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw new Error("Banco central respondeu " + response.status + (detail ? ": " + detail.slice(0, 300) : ""));
+  }
+  return response.json();
+}
+function hubStateSnapshot() {
+  return {
+    version: hubState.version,
+    updatedAt: hubState.updatedAt,
+    leads: hubState.leads,
+    projects: hubState.projects,
+    workspaces: hubState.workspaces,
+    workspaceUpdatedAt: hubState.workspaceUpdatedAt
+  };
+}
+async function persistHubStateDb() {
+  const snapshot = hubStateSnapshot();
+  await hubDbRpc("vertice_climax_put_state", { p_state: snapshot });
+}
+async function loadHubStateDb() {
+  if (!hubDbReady) {
+    console.warn("Banco central não configurado; dados centrais permanecem apenas no armazenamento local.");
+    return;
+  }
+  const remote = await hubDbRpc("vertice_climax_get_state", {});
+  const remoteHasData = Boolean(remote && (remote.updatedAt || remote.leads?.length || remote.projects?.length || Object.keys(remote.workspaces || {}).length));
+  const localHasData = Boolean(hubState.updatedAt || hubState.leads.length || hubState.projects.length || Object.keys(hubState.workspaces).length);
+  if (!remoteHasData && localHasData) {
+    await persistHubStateDb();
+    console.log("Dados centrais locais migrados para o banco persistente.");
+    return;
+  }
+  if (remote && typeof remote === "object") {
+    hubState.updatedAt = typeof remote.updatedAt === "string" ? remote.updatedAt : null;
+    hubState.leads = Array.isArray(remote.leads) ? remote.leads.slice(-5000) : [];
+    hubState.projects = Array.isArray(remote.projects) ? remote.projects.slice(-1000) : [];
+    hubState.workspaces = remote.workspaces && typeof remote.workspaces === "object" && !Array.isArray(remote.workspaces) ? remote.workspaces : {};
+    hubState.workspaceUpdatedAt = remote.workspaceUpdatedAt && typeof remote.workspaceUpdatedAt === "object" && !Array.isArray(remote.workspaceUpdatedAt) ? remote.workspaceUpdatedAt : {};
+    await persistStore();
+    console.log("Dados centrais restaurados do banco persistente.");
+  }
+}
+
 function extractText(message) {
   const body = message?.message || {};
   return body.conversation
@@ -145,6 +207,7 @@ function syncLeadFromIncoming(jid, message) {
     lead.stage = "Em conversa";
   }
   void persistStore();
+  void persistHubStateDb().catch(error => console.error("Falha ao salvar lead no banco central:", error.message));
 }
 function syncLeadFromOutbound(jid) {
   if (typeof jid !== "string" || !jid.endsWith("@s.whatsapp.net")) return;
@@ -154,6 +217,7 @@ function syncLeadFromOutbound(jid) {
   lead.lastOutboundAt = new Date().toISOString();
   lead.updatedAt = lead.lastOutboundAt;
   void persistStore();
+  void persistHubStateDb().catch(error => console.error("Falha ao salvar lead no banco central:", error.message));
 }
 function cacheMessage(jid, message) {
   if (!jid || !message) return;
@@ -437,7 +501,8 @@ app.put("/api/hub/state", async (req, res) => {
   hubState.updatedAt = new Date().toISOString();
   try {
     await persistStore();
-    return res.json({ ok: true, updatedAt: hubState.updatedAt, counts: { leads: hubState.leads.length, projects: hubState.projects.length, workspaces: Object.keys(hubState.workspaces).length } });
+    await persistHubStateDb();
+    return res.json({ ok: true, updatedAt: hubState.updatedAt, storage: "supabase-postgres", counts: { leads: hubState.leads.length, projects: hubState.projects.length, workspaces: Object.keys(hubState.workspaces).length } });
   } catch {
     return res.status(500).json({ error: "Não foi possível persistir o estado central" });
   }
@@ -577,5 +642,11 @@ process.on("SIGTERM", () => void shutdown("SIGTERM"));
 process.on("SIGINT", () => void shutdown("SIGINT"));
 
 await loadStore();
+try {
+  await loadHubStateDb();
+} catch (error) {
+  console.error("Falha ao carregar banco central persistente:", error.message);
+  process.exit(1);
+}
 app.listen(PORT, "0.0.0.0", () => console.log("Vértice WhatsApp service na porta " + PORT));
 void startWhatsApp();
