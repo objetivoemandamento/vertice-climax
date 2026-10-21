@@ -759,25 +759,64 @@ app.post("/api/projects/:projectId/publish", async (req, res) => {
       await persistHubStateDb();
       return res.status(502).json({ error: project.publishError });
     }
+    const readyState = String(deployment.readyState || deployment.status || "QUEUED").toUpperCase();
     const rawUrl = Array.isArray(deployment.alias) && deployment.alias.length ? deployment.alias[0] : deployment.url;
     const publicUrl = "https://" + String(rawUrl).replace(/^https?:\/\//i, "");
     const now = new Date().toISOString();
     project.vercelDeploymentId = String(deployment.id);
     project.publicUrl = publicUrl;
-    project.publishStatus = String(deployment.readyState || deployment.status || "QUEUED").toLowerCase();
-    project.publishedAt = now;
+    project.publishStatus = readyState.toLowerCase();
     project.updatedAt = now;
     project.contentReviewed = true;
     lead.websiteUrl = publicUrl;
-    lead.websitePublishedAt = now;
     lead.updatedAt = now;
-    if (lead.stage === "Pago") lead.stage = "Site entregue";
+    if (readyState === "READY") {
+      project.publishedAt = now;
+      lead.websitePublishedAt = now;
+      if (lead.stage === "Pago") lead.stage = "Site entregue";
+    }
     await persistStore();
     await persistHubStateDb();
-    return res.status(201).json({ ok: true, projectId: project.id, deploymentId: project.vercelDeploymentId, publicUrl, publishStatus: project.publishStatus });
+    return res.status(readyState === "READY" ? 201 : 202).json({ ok: true, projectId: project.id, deploymentId: project.vercelDeploymentId, publicUrl, publishStatus: project.publishStatus });
   } catch (error) {
     console.error("Falha na publicação Vercel:", error.message);
     return res.status(502).json({ error: "Falha ao publicar o site. O projeto e o pagamento permanecem salvos." });
+  }
+});
+
+
+app.get("/api/projects/:projectId/publish-status", async (req, res) => {
+  if (!VERCEL_TOKEN) return res.status(503).json({ error: "Configure VERCEL_TOKEN no backend para consultar a publicação." });
+  const project = hubState.projects.find(item => item.id === req.params.projectId);
+  if (!project) return res.status(404).json({ error: "Projeto não encontrado." });
+  if (!project.vercelDeploymentId) return res.status(409).json({ error: "Este projeto ainda não possui uma publicação iniciada." });
+  const url = new URL("https://api.vercel.com/v13/deployments/" + encodeURIComponent(project.vercelDeploymentId));
+  if (VERCEL_TEAM_ID) url.searchParams.set("teamId", VERCEL_TEAM_ID);
+  try {
+    const response = await fetch(url, { headers: { Authorization: "Bearer " + VERCEL_TOKEN, Accept: "application/json" } });
+    const deployment = await response.json().catch(() => ({}));
+    if (!response.ok) return res.status(502).json({ error: "Não foi possível consultar o estado da publicação." });
+    const state = String(deployment.readyState || deployment.status || project.publishStatus || "QUEUED").toUpperCase();
+    project.publishStatus = state.toLowerCase();
+    const alias = Array.isArray(deployment.alias) && deployment.alias.length ? deployment.alias[0] : deployment.url;
+    if (alias) project.publicUrl = "https://" + String(alias).replace(/^https?:\/\//i, "");
+    project.updatedAt = new Date().toISOString();
+    const lead = hubState.leads.find(item => item.id === project.leadId);
+    if (state === "READY" && lead && lead.paymentStatus === "approved" && lead.paymentId) {
+      project.publishedAt = project.publishedAt || project.updatedAt;
+      lead.websiteUrl = project.publicUrl;
+      lead.websitePublishedAt = project.publishedAt;
+      if (lead.stage === "Pago") lead.stage = "Site entregue";
+      lead.updatedAt = project.updatedAt;
+    } else if (state === "ERROR") {
+      project.publishError = "A hospedagem informou falha na publicação.";
+    }
+    await persistStore();
+    await persistHubStateDb();
+    return res.json({ ok: true, projectId: project.id, publicUrl: project.publicUrl || null, publishStatus: project.publishStatus, error: project.publishError || null });
+  } catch (error) {
+    console.error("Falha ao consultar estado Vercel:", error.message);
+    return res.status(502).json({ error: "Falha ao consultar o estado da publicação." });
   }
 });
 
