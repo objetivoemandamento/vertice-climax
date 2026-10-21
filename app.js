@@ -1,10 +1,55 @@
 (()=>{"use strict";
-const $=s=>document.querySelector(s),KEY="vertice_climax_openai_key",STORE="vertice_climax_workspace_v2";
+const $=s=>document.querySelector(s),KEY="vertice_climax_openai_key",STORE="vertice_climax_workspace_v2",HUB_URL="vertice_wa_service_url",HUB_TOKEN="vertice_wa_service_token",WORKSPACE_REV="vertice_climax_workspace_updated_at";
 const starter={"index.html":'<!doctype html>\n<html lang="pt-BR">\n<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Meu projeto</title></head>\n<body><main><h1>Sua próxima ideia começa aqui.</h1><p>Descreva o que deseja criar no Vértice Climax.</p></main></body>\n</html>',"style.css":"body{margin:0;font-family:Inter,system-ui,sans-serif;color:#18202a;padding:2rem}main{max-width:900px;margin:10vh auto}h1{font-size:clamp(2rem,6vw,4rem)}","app.js":"// Escreva aqui a lógica do projeto."};
-let files=loadWorkspace(),selected=Object.keys(files)[0]||"index.html",previewUrl=null,busy=false,editor=null;
+let files=loadWorkspace(),selected=Object.keys(files)[0]||"index.html",previewUrl=null,busy=false,editor=null,hubTimer=null,hubBusy=false;
 const system="Você é Vértice Climax, um agente de engenharia de software inspirado em assistentes de programação. Trabalhe incrementalmente e preserve arquivos existentes quando possível. Responda SOMENTE com JSON válido, sem markdown, neste formato: {\"mensagem\":\"resumo em português brasileiro\",\"arquivos\":{\"caminho/arquivo.ext\":\"conteúdo COMPLETO do arquivo alterado\"},\"acao\":\"criar|editar|responder\"}. Se apenas responder, use arquivos:{} e acao:responder. Para cada arquivo alterado, forneça o conteúdo integral. Nunca inclua chaves, senhas, tokens ou segredos nos arquivos. Valide sintaxe, caminhos, importações, responsividade, acessibilidade e segurança. Não use eval nem Function para executar código gerado. Prefira HTML/CSS/JS puros salvo pedido por framework. Para mapas, use Leaflet + OpenStreetMap via CDN, zoom, marcadores, popups e busca Nominatim com aviso de uso responsável; não invente credenciais. Para links WhatsApp use https://wa.me/NUMERO?text=MENSAGEM somente quando o usuário fornecer o número; nunca invente telefone. Se pedirem revisão/correção, examine todos os arquivos atuais e faça alterações concretas. Retorne JSON válido sempre.";
 function loadWorkspace(){try{const x=JSON.parse(localStorage.getItem(STORE)||"null");if(x&&typeof x==="object"&&!Array.isArray(x)&&Object.keys(x).length)return x}catch(e){}return {...starter}}
-function persist(){try{localStorage.setItem(STORE,JSON.stringify(files));$("#save-state").textContent="Salvo localmente · "+new Date().toLocaleTimeString("pt-BR")}catch(e){$("#save-state").textContent="Armazenamento local cheio; exporte o ZIP."}}
+function persist(sync=true){try{localStorage.setItem(STORE,JSON.stringify(files));localStorage.setItem(WORKSPACE_REV,new Date().toISOString());$("#save-state").textContent="Salvo localmente · "+new Date().toLocaleTimeString("pt-BR");if(sync)queueWorkspaceSync()}catch(e){$("#save-state").textContent="Armazenamento local cheio; exporte o ZIP."}}
+function hubBase(){let value=($("#hub-url-input")?.value||localStorage.getItem(HUB_URL)||"").trim();while(value.endsWith("/"))value=value.slice(0,-1);return value}
+function hubToken(){return ($("#hub-token-input")?.value||sessionStorage.getItem(HUB_TOKEN)||"").trim()}
+async function hubRequest(path,options={}){
+  const base=hubBase(),token=hubToken();
+  if(!base||!token)throw Error("Configure a URL e o token do núcleo nas Configurações.");
+  const headers={Authorization:"Bearer "+token};
+  if(options.body)headers["Content-Type"]="application/json";
+  const response=await fetch(base+path,{...options,headers:{...headers,...(options.headers||{})}});
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok)throw Error(data.error||data.message||"HTTP "+response.status);
+  return data;
+}
+function queueWorkspaceSync(){
+  if(!sessionStorage.getItem(HUB_TOKEN)||hubBusy)return;
+  if(hubTimer)clearTimeout(hubTimer);
+  hubTimer=setTimeout(()=>{void syncWorkspaceWithHub(true)},1800);
+}
+async function syncWorkspaceWithHub(silent=false){
+  if(hubBusy)return;
+  const token=hubToken(),base=hubBase();
+  if(!token||!base){if(!silent)toast("Configure o núcleo Vértice antes de sincronizar.");return}
+  hubBusy=true;
+  const status=$("#hub-sync-status");
+  try{
+    if(status)status.textContent="Sincronizando arquivos com o núcleo…";
+    const remote=await hubRequest("/api/hub/state");
+    const remoteFiles=remote.workspaces?.studio;
+    const localRev=Date.parse(localStorage.getItem(WORKSPACE_REV)||"1970-01-01T00:00:00Z")||0;
+    const remoteRev=Date.parse(remote.workspaceUpdatedAt?.studio||"1970-01-01T00:00:00Z")||0;
+    if(remoteFiles&&Object.keys(remoteFiles).length&&remoteRev>localRev){
+      files=remoteFiles;selected=Object.keys(files)[0]||"index.html";
+      localStorage.setItem(STORE,JSON.stringify(files));localStorage.setItem(WORKSPACE_REV,remote.workspaceUpdatedAt.studio);
+      tree();showFile();preview();
+    }
+    const workspaces={...(remote.workspaces||{}),studio:files};
+    const workspaceUpdatedAt={...(remote.workspaceUpdatedAt||{}),studio:localStorage.getItem(WORKSPACE_REV)||new Date().toISOString()};
+    const result=await hubRequest("/api/hub/state",{method:"PUT",body:JSON.stringify({leads:remote.leads||[],projects:remote.projects||[],workspaces,workspaceUpdatedAt})});
+    if(status)status.textContent="Workspace sincronizado · "+Object.keys(files).length+" arquivos · núcleo atualizado "+new Date(result.updatedAt).toLocaleTimeString("pt-BR");
+    if(!silent)toast("Workspace sincronizado com o núcleo Vértice.");
+    return result;
+  }catch(e){
+    if(status)status.textContent="Núcleo indisponível: "+e.message+" · os arquivos locais foram preservados.";
+    if(!silent)toast("Falha na sincronização: "+e.message);
+  }finally{hubBusy=false}
+}
 function toast(s){const e=$("#toast");e.textContent=s;e.classList.add("show");setTimeout(()=>e.classList.remove("show"),2600)}
 function tree(){const t=$("#file-tree");t.replaceChildren();Object.keys(files).sort().forEach(n=>{const b=document.createElement("button");b.className="file"+(n===selected?" active":"");b.textContent="▤  "+n;b.onclick=()=>{saveEditor(false);selected=n;tree();showFile()};t.append(b)});$("#file-count").textContent=Object.keys(files).length}
 function showFile(){const e=$("#file-editor"),value=files[selected]??"";if(editor){editor.setValue(value);editor.setOption("mode",editorMode(selected))}else e.value=value;$("#preview-file-label").textContent=selected+" · prévia";e.dataset.original=value}
@@ -23,7 +68,7 @@ if(changed.length){selected=changed[0];persist();tree();showFile();preview();add
 }catch(e){add("assistant","Não foi possível concluir: "+e.message+"\nVerifique a chave, o saldo/limites da API e tente novamente.")}finally{busy=false;$("#send-button").disabled=false;$("#api-status").textContent=localStorage.getItem(KEY)?"API configurada neste navegador":"Configure a chave OpenAI"}}
 $("#prompt-form").addEventListener("submit",e=>{e.preventDefault();const p=$("#prompt-input").value.trim();if(p){$("#prompt-input").value="";run(p)}});
 document.querySelectorAll(".suggestion").forEach(b=>b.addEventListener("click",()=>{$("#prompt-input").value=b.textContent.trim();$("#prompt-input").focus()}));
-$("#settings-open").onclick=()=>{$("#api-key-input").value=localStorage.getItem(KEY)||"";$("#settings-modal").classList.remove("hidden")};$("#settings-close").onclick=()=>$("#settings-modal").classList.add("hidden");$("#settings-save").onclick=()=>{const k=$("#api-key-input").value.trim();if(k)localStorage.setItem(KEY,k);else localStorage.removeItem(KEY);$("#api-status").textContent=k?"API configurada neste navegador":"Configure a chave OpenAI";$("#settings-modal").classList.add("hidden");toast(k?"Chave salva neste navegador":"Chave removida")};
+$("#settings-open").onclick=()=>{$("#api-key-input").value=localStorage.getItem(KEY)||"";$("#hub-url-input").value=localStorage.getItem(HUB_URL)||"https://vertice-climax-whatsapp.onrender.com";$("#hub-token-input").value=sessionStorage.getItem(HUB_TOKEN)||"";$("#settings-modal").classList.remove("hidden")};$("#settings-close").onclick=()=>$("#settings-modal").classList.add("hidden");$("#settings-save").onclick=()=>{const k=$("#api-key-input").value.trim(),url=$("#hub-url-input").value.trim(),token=$("#hub-token-input").value.trim();if(k)localStorage.setItem(KEY,k);else localStorage.removeItem(KEY);if(url)localStorage.setItem(HUB_URL,url);else localStorage.removeItem(HUB_URL);if(token)sessionStorage.setItem(HUB_TOKEN,token);else sessionStorage.removeItem(HUB_TOKEN);$("#api-status").textContent=k?"API configurada neste navegador":"Configure a chave OpenAI";$("#settings-modal").classList.add("hidden");toast("Configurações salvas");if(token&&url)void syncWorkspaceWithHub(true)};$("#hub-sync-studio").onclick=()=>syncWorkspaceWithHub(false);
 $("#new-file").onclick=()=>{const n=prompt("Nome do arquivo (ex.: pages/home.html):");if(!n)return;const p=n.trim().replace(/^\.\//,"");if(!validPath(p))return toast("Caminho inválido.");if(Object.hasOwn(files,p))return toast("Este arquivo já existe.");files[p]="";selected=p;persist();tree();showFile()};
 $("#delete-file").onclick=()=>{if(Object.keys(files).length<2)return toast("Mantenha pelo menos um arquivo.");if(!confirm("Excluir "+selected+"?"))return;delete files[selected];selected=Object.keys(files)[0];persist();tree();showFile();preview()};
 $("#save-file").onclick=()=>{saveEditor();tree();preview()};
@@ -31,5 +76,5 @@ $("#refresh-preview").onclick=preview;$("#open-preview").onclick=()=>{preview();
 $("#download-project").onclick=async()=>{saveEditor(false);if(!window.JSZip)return toast("Não foi possível carregar JSZip; verifique a conexão.");try{const z=new JSZip();Object.entries(files).forEach(([n,c])=>z.file(n,c));z.file("README.md","# Projeto criado com Vértice Climax\n\nEdite os arquivos e publique-os no seu provedor.\n");const blob=await z.generateAsync({type:"blob"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="vertice-climax-projeto.zip";a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);toast("ZIP gerado")}catch(e){toast("Falha ao exportar: "+e.message)}};
 $("#clear-workspace").onclick=()=>{if(!confirm("Apagar os arquivos salvos neste navegador?"))return;files={...starter};selected="index.html";persist();tree();showFile();preview();$("#settings-modal").classList.add("hidden");toast("Workspace reiniciado")};
 if(window.CodeMirror){editor=window.CodeMirror.fromTextArea($("#file-editor"),{lineNumbers:true,mode:editorMode(selected),theme:"material-darker",lineWrapping:false,tabSize:2,indentUnit:2,viewportMargin:20});editor.setSize("100%","320px");editor.addKeyMap({"Ctrl-S":()=>{saveEditor();preview()},"Cmd-S":()=>{saveEditor();preview()}})}
-tree();showFile();preview();$("#api-status").textContent=localStorage.getItem(KEY)?"API configurada neste navegador":"Configure a chave OpenAI";
+tree();showFile();preview();$("#api-status").textContent=localStorage.getItem(KEY)?"API configurada neste navegador":"Configure a chave OpenAI";if(sessionStorage.getItem(HUB_TOKEN))void syncWorkspaceWithHub(true);
 })();
