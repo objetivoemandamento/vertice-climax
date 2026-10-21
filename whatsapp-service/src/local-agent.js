@@ -15,9 +15,9 @@ export function classifyIncomingMessage(messageText, currentStage = "inicio") {
 
   if (/\b(de onde|onde conseguiu|como conseguiu|quem passou|origem do contato|meu numero)\b/.test(text)) {
     return {
-      action: "reply",
+      action: "human_review",
       stage: currentStage,
-      reply: "Encontrei as informações comerciais no perfil público do estabelecimento que consultei. Se preferir não receber mensagens, me avise e encerro o contato."
+      reason: "O contato perguntou a origem dos dados; verificar a fonte real registrada antes de responder."
     };
   }
 
