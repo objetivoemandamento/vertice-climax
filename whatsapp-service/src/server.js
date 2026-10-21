@@ -59,7 +59,7 @@ let sessionResetPromise = Promise.resolve();
 let automationEnabled = false;
 const automationContacts = new Map();
 const processedAutoMessageIds = new Set();
-const hubState = { version: 1, updatedAt: null, leads: [], projects: [], workspaces: {} };
+const hubState = { version: 1, updatedAt: null, leads: [], projects: [], workspaces: {}, workspaceUpdatedAt: {} };
 
 function safeString(value, max = 10000) {
   return typeof value === "string" ? value.slice(0, max) : "";
@@ -112,6 +112,7 @@ async function loadStore() {
       hubState.leads = Array.isArray(data.hubState.leads) ? data.hubState.leads.slice(-5000) : [];
       hubState.projects = Array.isArray(data.hubState.projects) ? data.hubState.projects.slice(-1000) : [];
       hubState.workspaces = data.hubState.workspaces && typeof data.hubState.workspaces === "object" && !Array.isArray(data.hubState.workspaces) ? data.hubState.workspaces : {};
+      hubState.workspaceUpdatedAt = data.hubState.workspaceUpdatedAt && typeof data.hubState.workspaceUpdatedAt === "object" && !Array.isArray(data.hubState.workspaceUpdatedAt) ? data.hubState.workspaceUpdatedAt : {};
     }
     automationEnabled = data.automationEnabled === true;
     for (const contact of Array.isArray(data.automationContacts) ? data.automationContacts.slice(-CHAT_LIMIT) : []) {
@@ -333,7 +334,8 @@ app.get("/api/hub/state", (_req, res) => {
     updatedAt: hubState.updatedAt,
     leads: hubState.leads,
     projects: hubState.projects,
-    workspaces: hubState.workspaces
+    workspaces: hubState.workspaces,
+    workspaceUpdatedAt: hubState.workspaceUpdatedAt
   });
 });
 app.put("/api/hub/state", async (req, res) => {
