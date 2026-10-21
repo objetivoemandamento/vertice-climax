@@ -585,7 +585,11 @@ app.post("/webhooks/mercadopago", async (req, res) => {
     const lead = hubState.leads.find(item => item.id === leadId);
     if (!lead) return res.status(200).json({ received: true, applied: false, reason: "lead_not_found" });
     if (lead.paymentId && String(lead.paymentId) === String(payment.id) && ["Pago", "Site entregue"].includes(lead.stage)) {
-      return res.status(200).json({ received: true, applied: true, duplicate: true });
+      const project = createPaidProjectWorkspace(lead, lead.paymentApprovedAt || new Date().toISOString());
+      lead.projectId = project.id;
+      await persistStore();
+      await persistHubStateDb();
+      return res.status(200).json({ received: true, applied: true, duplicate: true, projectId: project.id });
     }
     if (["Pago", "Site entregue"].includes(lead.stage)) {
       return res.status(200).json({ received: true, applied: false, reason: "lead_already_paid" });
