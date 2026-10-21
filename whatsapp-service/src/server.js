@@ -399,7 +399,10 @@ app.put("/api/hub/state", async (req, res) => {
         stage: optedOut ? "Sem interesse" : safeString(item.stage, 80),
         updatedAt: safeString(item.updatedAt, 60) || new Date().toISOString()
       };
-    }).slice(-5000);
+    });
+    const incomingIds = new Set(input.leads.map(item => item.id));
+    const preservedOptOuts = [...previousLeads.values()].filter(item => (item.doNotContact === true || item.stage === "Sem interesse") && !incomingIds.has(item.id));
+    hubState.leads = [...hubState.leads, ...preservedOptOuts].slice(-5000);
   }
   if (input.projects !== undefined) {
     hubState.projects = input.projects.filter(item => item && typeof item.id === "string").slice(-1000);
