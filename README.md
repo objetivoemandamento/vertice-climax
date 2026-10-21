@@ -1,34 +1,66 @@
 # Vértice Climax
 
-Assistente de programação com interface em português brasileiro, editor local de arquivos, árvore de projeto, prévia isolada responsiva, geração de código via OpenAI e exportação ZIP.
+Ambiente de programação e automação comercial em português brasileiro. O frontend atual inclui editor de arquivos, pré-visualização HTML, exportação ZIP e painel para conexão do WhatsApp Web.
 
-## Recursos implementados no repositório
+## WhatsApp Web
 
-- Interface responsiva com tema escuro.
-- Chat de programação com seleção de modelo OpenAI.
-- Geração e atualização incremental de arquivos com resposta JSON estruturada e uma tentativa de correção quando o JSON vem inválido.
-- Editor manual, criação/exclusão de arquivos, salvamento do workspace no navegador e prévia HTML.
-- Exportação do workspace atual em ZIP.
-- Instruções para mapas Leaflet/OpenStreetMap e CTAs WhatsApp no prompt de sistema.
-- Página de conector WhatsApp Web com QR Code, leitura do cache de conversas/mensagens e envio com aprovação explícita.
-- Serviço Node.js separado para manter a sessão do WhatsApp fora de funções serverless.
+O conector usa Baileys, uma biblioteca comunitária não oficial. A autenticação é feita com QR Code do WhatsApp Web; não exige a API oficial do WhatsApp, mas depende da compatibilidade contínua com o protocolo e pode sofrer desconexões ou restrições.
 
-## Abrir localmente
+### Executar localmente
 
-Abra index.html num navegador ou sirva a raiz com um servidor estático. Para gerar código com IA, abra Configurações e informe uma chave de API válida. A chave é armazenada no localStorage deste navegador e as chamadas são feitas diretamente para a API OpenAI; isso é adequado apenas para teste pessoal, não para um serviço público multiusuário.
+Requisitos: Node.js 20+.
 
-## Publicar frontend
+```bash
+cd whatsapp-service
+npm install
+cp .env.example .env
+``
 
-Importe este repositório no Vercel ou Render como site estático, com a raiz do repositório como diretório publicado. Não há etapa de build.
+Edite `.env` e configure:
+- `VERTICE_SERVICE_TOKEN`: segredo aleatório forte, com pelo menos 24 caracteres.
+- `FRONTEND_ORIGIN`: origem exata do frontend, por exemplo `http://localhost:8080`.
+- `DATA_DIR`: diretório persistente e gravável para credenciais e cache; por padrão, `whatsapp-service/data`.
+- `MESSAGE_CACHE_LIMIT`: limite de mensagens armazenadas por conversa.
+- `CHAT_CACHE_LIMIT`: limite de conversas armazenadas.
 
-## Publicar WhatsApp
+Inicie o serviço:
 
-Leia whatsapp-service/README.md. O serviço requer Node.js 20+, um token forte configurado como variável de ambiente e armazenamento persistente para whatsapp-service/data/auth. Configure FRONTEND_ORIGIN para o domínio real do frontend. Depois do deploy, abra whatsapp.html, informe a URL HTTPS do serviço e o mesmo token, salve e solicite o QR Code.
+```bash
+npm start
+```
+
+Abra `whatsapp.html`, informe a URL HTTPS ou local do serviço e o mesmo token. Clique em “Obter QR Code” e escaneie com WhatsApp → Dispositivos conectados → Conectar dispositivo.
+
+### Persistência e hospedagem
+
+O serviço salva as credenciais da sessão em `DATA_DIR/auth` e o cache de conversas/mensagens em `DATA_DIR/store.json`, usando escrita temporária e renomeação para reduzir o risco de corrupção. Configure um disco persistente no provedor de hospedagem e defina `DATA_DIR` para o caminho montado. Em hospedagem gratuita sem disco persistente, uma nova implantação pode apagar a sessão e exigir novo pareamento.
+
+Não exponha a pasta de dados, o arquivo `.env` ou o token. Faça backups protegidos se precisar preservar a sessão. O cache é limitado e não representa garantia de histórico completo de conversas antigas.
+
+### Endpoints
+
+Todas as rotas em `/api` exigem `Authorization: Bearer VERTICE_SERVICE_TOKEN`.
+
+- `GET /health`: saúde básica do serviço.
+- `GET /api/status`: estado da conexão.
+- `GET /api/qr`: QR Code atual, quando disponível.
+- `GET /api/chats`: conversas presentes no cache.
+- `GET /api/messages?chatId=...`: mensagens armazenadas para uma conversa.
+- `POST /api/send`: envio individual com `chatId`, `text` e `approved: true`.
+
+O envio possui validação, limite de taxa e aprovação explícita. Não é um mecanismo de disparo em massa. Utilize apenas para conversas autorizadas, respeite recusas e políticas aplicáveis. A automação não oficial pode gerar restrições à conta.
+
+## Studio de programação
+
+O editor web permite criar e editar arquivos no navegador, pré-visualizar HTML/CSS/JavaScript e exportar o workspace em ZIP. O workspace fica no armazenamento local do navegador; exporte backups para não perder os arquivos.
+
+A versão atual do Studio ainda possui geração de código via API OpenAI no frontend. Isso requer chave de API e não é equivalente a um modelo local. Não publique o frontend para uso multiusuário com segredos no navegador. A remoção dessa dependência exige substituir a geração por regras/templates locais ou integrar um modelo executado localmente.
 
 ## Limitações importantes
 
-- O código foi enviado ao GitHub, mas só está efetivamente publicado quando um deploy termina com sucesso.
-- A geração de código exige uma chave OpenAI válida e acesso à API; ChatGPT Plus/Go não substitui uma chave de API.
-- A prévia executa o HTML no iframe sandbox e não equivale a um ambiente completo de build para frameworks.
-- O serviço WhatsApp usa Baileys, biblioteca comunitária não oficial. O cache não garante histórico completo de conversas antigas e a conexão pode ser desconectada ou restringida pelo WhatsApp. Use apenas contas e mensagens autorizadas; não faça spam.
-- Para público externo, implemente autenticação, limites de uso, backend seguro para IA e isolamento por usuário antes de divulgar amplamente.
+- Um QR Code real só aparece quando o conector recebe um QR da sessão.
+- O serviço precisa permanecer ativo para receber mensagens em tempo real.
+- Sem armazenamento persistente no servidor, credenciais e cache podem ser perdidos em novas implantações.
+- O cache de mensagens inclui eventos recebidos durante a execução e não garante sincronização de todo o histórico antigo.
+- A conexão Baileys não é uma integração oficial da Meta.
+- O envio de mensagens deve respeitar consentimento, privacidade e políticas da plataforma.
