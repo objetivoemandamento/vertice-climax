@@ -45,6 +45,17 @@ O serviço salva as credenciais da sessão em `DATA_DIR/auth` e o cache de conve
 
 Não exponha a pasta de dados, o arquivo `.env` ou o token. Faça backups protegidos se precisar preservar a sessão. O cache é limitado e não representa garantia de histórico completo de conversas antigas.
 
+### Verificação rápida do conector
+
+Com o serviço local rodando, em outro terminal execute:
+
+```powershell
+cd whatsapp-service
+npm run smoke
+```
+
+O teste verifica o endpoint de saúde e se as rotas privadas rejeitam chamadas sem token. Para testar também a autenticação válida, defina `VERTICE_SERVICE_TOKEN` no ambiente do terminal com o mesmo valor do arquivo `.env` antes de executar. O smoke test não envia mensagens nem valida um pareamento real; isso exige escanear o QR Code com o proprietário.
+
 ### Endpoints
 
 Todas as rotas em `/api` exigem `Authorization: Bearer VERTICE_SERVICE_TOKEN`.
