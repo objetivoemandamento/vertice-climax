@@ -1,5 +1,5 @@
 (()=>{"use strict";
-const $=s=>document.querySelector(s),KEY="vertice_climax_openai_key",STORE="vertice_climax_workspace_v2",HUB_URL="vertice_wa_service_url",HUB_TOKEN="vertice_wa_service_token",WORKSPACE_REV="vertice_climax_workspace_updated_at";
+const $=s=>document.querySelector(s),KEY="vertice_climax_openai_key",HUB_URL="vertice_wa_service_url",HUB_TOKEN="vertice_wa_service_token",PROJECT_ID=(new URLSearchParams(location.search).get("project")||"").replace(/[^a-zA-Z0-9_-]/g,"").slice(0,120),HUB_WORKSPACE_KEY=PROJECT_ID?"project:"+PROJECT_ID:"studio",STORE=PROJECT_ID?"vertice_climax_workspace_project_"+PROJECT_ID:"vertice_climax_workspace_v2",WORKSPACE_REV="vertice_climax_workspace_updated_at_"+HUB_WORKSPACE_KEY;
 const starter={"index.html":'<!doctype html>\n<html lang="pt-BR">\n<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Meu projeto</title></head>\n<body><main><h1>Sua próxima ideia começa aqui.</h1><p>Descreva o que deseja criar no Vértice Climax.</p></main></body>\n</html>',"style.css":"body{margin:0;font-family:Inter,system-ui,sans-serif;color:#18202a;padding:2rem}main{max-width:900px;margin:10vh auto}h1{font-size:clamp(2rem,6vw,4rem)}","app.js":"// Escreva aqui a lógica do projeto."};
 let files=loadWorkspace(),selected=Object.keys(files)[0]||"index.html",previewUrl=null,busy=false,editor=null,hubTimer=null,hubBusy=false;
 const system="Você é Vértice Climax, um agente de engenharia de software inspirado em assistentes de programação. Trabalhe incrementalmente e preserve arquivos existentes quando possível. Responda SOMENTE com JSON válido, sem markdown, neste formato: {\"mensagem\":\"resumo em português brasileiro\",\"arquivos\":{\"caminho/arquivo.ext\":\"conteúdo COMPLETO do arquivo alterado\"},\"acao\":\"criar|editar|responder\"}. Se apenas responder, use arquivos:{} e acao:responder. Para cada arquivo alterado, forneça o conteúdo integral. Nunca inclua chaves, senhas, tokens ou segredos nos arquivos. Valide sintaxe, caminhos, importações, responsividade, acessibilidade e segurança. Não use eval nem Function para executar código gerado. Prefira HTML/CSS/JS puros salvo pedido por framework. Para mapas, use Leaflet + OpenStreetMap via CDN, zoom, marcadores, popups e busca Nominatim com aviso de uso responsável; não invente credenciais. Para links WhatsApp use https://wa.me/NUMERO?text=MENSAGEM somente quando o usuário fornecer o número; nunca invente telefone. Se pedirem revisão/correção, examine todos os arquivos atuais e faça alterações concretas. Retorne JSON válido sempre.";
@@ -31,18 +31,18 @@ async function syncWorkspaceWithHub(silent=false){
   try{
     if(status)status.textContent="Sincronizando arquivos com o núcleo…";
     const remote=await hubRequest("/api/hub/state");
-    const remoteFiles=remote.workspaces?.studio;
+    const remoteFiles=remote.workspaces?.[HUB_WORKSPACE_KEY];
     const localRev=Date.parse(localStorage.getItem(WORKSPACE_REV)||"1970-01-01T00:00:00Z")||0;
-    const remoteRev=Date.parse(remote.workspaceUpdatedAt?.studio||"1970-01-01T00:00:00Z")||0;
+    const remoteRev=Date.parse(remote.workspaceUpdatedAt?.[HUB_WORKSPACE_KEY]||"1970-01-01T00:00:00Z")||0;
     if(remoteFiles&&Object.keys(remoteFiles).length&&remoteRev>localRev){
       files=remoteFiles;selected=Object.keys(files)[0]||"index.html";
-      localStorage.setItem(STORE,JSON.stringify(files));localStorage.setItem(WORKSPACE_REV,remote.workspaceUpdatedAt.studio);
+      localStorage.setItem(STORE,JSON.stringify(files));localStorage.setItem(WORKSPACE_REV,remote.workspaceUpdatedAt[HUB_WORKSPACE_KEY]);
       tree();showFile();preview();
     }
-    const workspaces={...(remote.workspaces||{}),studio:files};
-    const workspaceUpdatedAt={...(remote.workspaceUpdatedAt||{}),studio:localStorage.getItem(WORKSPACE_REV)||new Date().toISOString()};
+    const workspaces={...(remote.workspaces||{}),[HUB_WORKSPACE_KEY]:files};
+    const workspaceUpdatedAt={...(remote.workspaceUpdatedAt||{}),[HUB_WORKSPACE_KEY]:localStorage.getItem(WORKSPACE_REV)||new Date().toISOString()};
     const result=await hubRequest("/api/hub/state",{method:"PUT",body:JSON.stringify({leads:remote.leads||[],projects:remote.projects||[],workspaces,workspaceUpdatedAt})});
-    if(status)status.textContent="Workspace sincronizado · "+Object.keys(files).length+" arquivos · núcleo atualizado "+new Date(result.updatedAt).toLocaleTimeString("pt-BR");
+    if(status)status.textContent=(PROJECT_ID?"Projeto "+PROJECT_ID:"Workspace principal")+" sincronizado · "+Object.keys(files).length+" arquivos · núcleo atualizado "+new Date(result.updatedAt).toLocaleTimeString("pt-BR");
     if(!silent)toast("Workspace sincronizado com o núcleo Vértice.");
     return result;
   }catch(e){
