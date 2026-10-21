@@ -347,17 +347,19 @@ app.post("/api/automation/config", (req, res) => {
   return res.json({ ok: true, enabled: automationEnabled });
 });
 app.post("/api/automation/contacts", (req, res) => {
-  const { chatId, name, consent } = req.body || {};
+  const { chatId, name, consent, consentEvidence } = req.body || {};
   if (typeof chatId !== "string" || !chatId.endsWith("@s.whatsapp.net") || chatId.length > 180) {
     return res.status(400).json({ error: "Selecione uma conversa individual válida" });
   }
   if (consent !== true) return res.status(400).json({ error: "É necessário registrar autorização válida antes de ativar respostas automáticas" });
+  if (typeof consentEvidence !== "string" || !consentEvidence.trim() || consentEvidence.length > 500) return res.status(400).json({ error: "Registre a data ou referência da autorização" });
   const old = automationContacts.get(chatId) || {};
   const contact = {
     ...old,
     chatId,
     name: safeString(name, 120) || chats.get(chatId)?.name || chatId,
     consent: true,
+    consentEvidence: safeString(consentEvidence, 500),
     enabled: true,
     stage: old.stage || "inicio",
     updatedAt: Date.now(),
