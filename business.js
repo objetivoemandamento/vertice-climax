@@ -47,7 +47,13 @@ function render(){
     if(l.source)contact.append(element("small","", "Fonte: "+l.source));
     tr.append(contact);
     const stageCell=element("td");const sel=element("select","stage-select");sel.setAttribute("aria-label","Etapa de "+l.name);
-    STAGES.forEach(s=>{const op=element("option","",s);op.value=s;sel.append(op)});sel.value=l.stage;sel.addEventListener("change",()=>changeStage(l.id,sel.value));stageCell.append(sel);tr.append(stageCell);
+    STAGES.forEach(s=>{const op=element("option","",s);op.value=s;sel.append(op)});sel.value=l.stage;sel.addEventListener("change",()=>changeStage(l.id,sel.value));stageCell.append(sel);
+    if(l.paymentReviewRequired){stageCell.append(element("small","payment-warning","Revisão necessária: "+(l.paymentReviewReason||"divergência no pagamento")));}
+    else if(l.paymentStatus){
+      const labels={pending:"Aguardando",approved:"Confirmado",in_process:"Em análise",rejected:"Recusado",cancelled:"Cancelado",refunded:"Estornado"};
+      stageCell.append(element("small","payment-status","Pagamento: "+(labels[l.paymentStatus]||l.paymentStatus)));
+    }
+    tr.append(stageCell);
     const packageCell=element("td","",packageLabel(l.packageKey));tr.append(packageCell);
     const actions=element("td");const stack=element("div","row-actions");
     stack.append(button("Selecionar demonstração","",()=>selectDemo(l.id)));
@@ -252,7 +258,7 @@ async function refreshPendingPayments(){
 }
 async function checkAgentHealth(){
   const status=$("#agent-connect-status");
-  try{const d=await agentRequest("/api/status");status.textContent=d.connected?"WhatsApp conectado. Agente: "+(d.automationEnabled?"ativo":"desativado")+".":"Serviço acessível; WhatsApp ainda não conectado."}
+  try{const d=await agentRequest("/api/status");const wa=d.connected?"WhatsApp conectado. Agente: "+(d.automationEnabled?"ativo":"desativado")+".":"Serviço acessível; WhatsApp ainda não conectado.";const payments=d.paymentIntegrationConfigured?"Mercado Pago configurado.":"Mercado Pago pendente de credenciais no backend.";const persistence=d.whatsappAuthPersistence==="supabase-encrypted"?"Persistência criptografada configurada.":"Sessão apenas local; reinícios podem exigir novo pareamento.";status.textContent=[wa,payments,persistence].join(" ")}
   catch(e){status.textContent="Conexão não validada: "+e.message}
 }
 async function registerLeadWithAgent(id){

@@ -2,3 +2,5 @@
 .agent-connect-form{padding:16px;display:grid;grid-template-columns:minmax(180px,1fr) minmax(180px,1fr) auto;gap:10px;align-items:end}.agent-connect-form label{display:flex;flex-direction:column;gap:6px;color:#aab6c5;font-size:11px}.agent-connect-form input{min-width:0;background:#0b1118;color:#e6edf3;border:1px solid #283341;border-radius:7px;padding:10px;font:inherit;font-size:12px}.agent-connect-form p{grid-column:1/-1;color:#8b98a8;font-size:11px;line-height:1.6;margin:0}.agent-connect-form button{white-space:nowrap}.consent-label{color:#86efac!important}.row-actions button:disabled{opacity:.45;cursor:not-allowed}@media(max-width:700px){.agent-connect-form{grid-template-columns:1fr}.agent-connect-form p{grid-column:auto}}
 
 .agent-connect-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.agent-connect-actions .button{margin:0}.agent-connect-form p{grid-column:1/-1}
+
+.payment-warning{display:block;color:#fbbf24!important;font-weight:700;margin-top:6px}.payment-status{display:block;color:#a8b8c8!important;margin-top:6px}
