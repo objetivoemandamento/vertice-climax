@@ -39,10 +39,10 @@ app.use(cors({
     if (!origin || origins.includes(origin)) return callback(null, true);
     return callback(new Error("Origem CORS não autorizada"));
   },
-  methods: ["GET", "POST", "OPTIONS"],
+  methods: ["GET", "POST", "PUT", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"]
 }));
-app.use(express.json({ limit: "64kb", strict: true }));
+app.use(express.json({ limit: "3mb", strict: true }));
 
 let sock = null;
 let qr = null;
@@ -59,6 +59,7 @@ let sessionResetPromise = Promise.resolve();
 let automationEnabled = false;
 const automationContacts = new Map();
 const processedAutoMessageIds = new Set();
+const hubState = { version: 1, updatedAt: null, leads: [], projects: [], workspaces: {} };
 
 function safeString(value, max = 10000) {
   return typeof value === "string" ? value.slice(0, max) : "";
@@ -83,7 +84,8 @@ function persistStore() {
     messages: [...messages.entries()].map(([id, items]) => [id, items.slice(-MESSAGE_LIMIT)]).slice(-CHAT_LIMIT),
     automationEnabled,
     automationContacts: [...automationContacts.values()].slice(-CHAT_LIMIT),
-    processedAutoMessageIds: [...processedAutoMessageIds].slice(-2000)
+    processedAutoMessageIds: [...processedAutoMessageIds].slice(-2000),
+    hubState
   });
   persistQueue = persistQueue.then(async () => {
     const tmp = STORE_FILE + ".tmp";
@@ -104,6 +106,12 @@ async function loadStore() {
       if (Array.isArray(pair) && typeof pair[0] === "string" && Array.isArray(pair[1])) {
         messages.set(pair[0], pair[1].slice(-MESSAGE_LIMIT));
       }
+    }
+    if (data.hubState && typeof data.hubState === "object") {
+      hubState.updatedAt = typeof data.hubState.updatedAt === "string" ? data.hubState.updatedAt : null;
+      hubState.leads = Array.isArray(data.hubState.leads) ? data.hubState.leads.slice(-5000) : [];
+      hubState.projects = Array.isArray(data.hubState.projects) ? data.hubState.projects.slice(-1000) : [];
+      hubState.workspaces = data.hubState.workspaces && typeof data.hubState.workspaces === "object" && !Array.isArray(data.hubState.workspaces) ? data.hubState.workspaces : {};
     }
     automationEnabled = data.automationEnabled === true;
     for (const contact of Array.isArray(data.automationContacts) ? data.automationContacts.slice(-CHAT_LIMIT) : []) {
@@ -319,6 +327,68 @@ app.get("/health", (_req, res) => res.json({
   cachedMessages: [...messages.values()].reduce((total, items) => total + items.length, 0)
 }));
 app.use("/api", requireAuth);
+app.get("/api/hub/state", (_req, res) => {
+  return res.json({
+    version: hubState.version,
+    updatedAt: hubState.updatedAt,
+    leads: hubState.leads,
+    projects: hubState.projects,
+    workspaces: hubState.workspaces
+  });
+});
+app.put("/api/hub/state", async (req, res) => {
+  const input = req.body || {};
+  if (input.leads !== undefined && (!Array.isArray(input.leads) || input.leads.length > 5000)) {
+    return res.status(400).json({ error: "leads deve ser uma lista de até 5000 registros" });
+  }
+  if (input.projects !== undefined && (!Array.isArray(input.projects) || input.projects.length > 1000)) {
+    return res.status(400).json({ error: "projects deve ser uma lista de até 1000 projetos" });
+  }
+  if (input.workspaces !== undefined && (!input.workspaces || typeof input.workspaces !== "object" || Array.isArray(input.workspaces))) {
+    return res.status(400).json({ error: "workspaces deve ser um objeto" });
+  }
+  if (input.leads !== undefined) {
+    if (input.leads.some(item => !item || typeof item.id !== "string" || typeof item.name !== "string" || item.name.length > 120)) {
+      return res.status(400).json({ error: "Cada lead precisa de id e nome válidos" });
+    }
+    hubState.leads = input.leads.map(item => ({
+      ...item,
+      name: safeString(item.name, 120),
+      notes: safeString(item.notes, 3000),
+      consentEvidence: safeString(item.consentEvidence, 500),
+      consent: item.consent === true && Boolean(item.consentEvidence),
+      doNotContact: item.doNotContact === true || item.stage === "Sem interesse",
+      updatedAt: safeString(item.updatedAt, 60) || new Date().toISOString()
+    })).slice(-5000);
+  }
+  if (input.projects !== undefined) {
+    hubState.projects = input.projects.filter(item => item && typeof item.id === "string").slice(-1000);
+  }
+  if (input.workspaces !== undefined) {
+    const entries = Object.entries(input.workspaces).slice(-100);
+    let totalBytes = 0;
+    const safeWorkspaces = {};
+    for (const [key, files] of entries) {
+      if (typeof key !== "string" || key.length > 120 || !files || typeof files !== "object" || Array.isArray(files)) continue;
+      const safeFiles = {};
+      for (const [name, content] of Object.entries(files).slice(0, 300)) {
+        if (typeof name !== "string" || name.length > 180 || name.startsWith("/") || name.split("/").includes("..") || name.split("/").some(part => part.startsWith(".env")) || typeof content !== "string") continue;
+        totalBytes += Buffer.byteLength(content, "utf8");
+        if (totalBytes > 2_000_000) return res.status(413).json({ error: "Workspace excede o limite total de 2 MB" });
+        safeFiles[name] = content;
+      }
+      safeWorkspaces[key] = safeFiles;
+    }
+    hubState.workspaces = safeWorkspaces;
+  }
+  hubState.updatedAt = new Date().toISOString();
+  try {
+    await persistStore();
+    return res.json({ ok: true, updatedAt: hubState.updatedAt, counts: { leads: hubState.leads.length, projects: hubState.projects.length, workspaces: Object.keys(hubState.workspaces).length } });
+  } catch {
+    return res.status(500).json({ error: "Não foi possível persistir o estado central" });
+  }
+});
 app.get("/api/status", (_req, res) => res.json({
   connected,
   connecting,
