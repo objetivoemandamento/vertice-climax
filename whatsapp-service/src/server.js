@@ -357,7 +357,11 @@ app.get("/health", (_req, res) => res.json({
   connecting,
   uptimeSeconds: Math.floor(process.uptime()),
   cachedChats: chats.size,
-  cachedMessages: [...messages.values()].reduce((total, items) => total + items.length, 0)
+  cachedMessages: [...messages.values()].reduce((total, items) => total + items.length, 0),
+  hubLeads: hubState.leads.length,
+  hubProjects: hubState.projects.length,
+  hubWorkspaces: Object.keys(hubState.workspaces).length,
+  hubUpdatedAt: hubState.updatedAt
 }));
 app.use("/api", requireAuth);
 app.get("/api/hub/state", (_req, res) => {
