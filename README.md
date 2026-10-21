@@ -105,5 +105,6 @@ A publicação via Vercel está implementada com bloqueio por pagamento confirma
 - O serviço precisa permanecer ativo para receber mensagens em tempo real.
 - Sem Supabase configurado, a sessão do WhatsApp permanece local e pode exigir novo pareamento; o cache de mensagens continua local mesmo com a sessão criptografada no Supabase.
 - O cache de mensagens inclui eventos recebidos durante a execução e não garante sincronização de todo o histórico antigo.
-- A publicação Vercel e a cobrança Mercado Pago só funcionam após configurar as credenciais no backend; a publicação exige aprovação explícita do conteúdo.\n- A conexão Baileys não é uma integração oficial da Meta.
+- A publicação Vercel e a cobrança Mercado Pago só funcionam após configurar as credenciais no backend; a publicação exige aprovação explícita do conteúdo.
+- A conexão Baileys não é uma integração oficial da Meta.
 - O envio de mensagens deve respeitar consentimento, privacidade e políticas da plataforma.
