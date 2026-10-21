@@ -123,9 +123,10 @@ async function importBackup(e){
     if(!persist())return;activeDemoId=null;resetForm();render();updateDemo();toast("Backup restaurado");
   }catch(err){toast("Falha ao restaurar: "+err.message)}finally{e.target.value=""}
 }
+function safeHttpUrl(value){const v=String(value||"").trim();return /^https?:\\/\\//i.test(v)?esc(v):""}
 function demoHtml(l){
   const name=esc(l.name),segment=esc(l.segment||"Negócio local"),location=esc(l.location||"Localização a confirmar");
-  const packageName=esc(packageLabel(l.packageKey)),website=esc(l.website||""),social=esc(l.social||"");
+  const packageName=esc(packageLabel(l.packageKey)),website=safeHttpUrl(l.website),social=safeHttpUrl(l.social);
   const phone=normalizedPhone(l.whatsapp),wa=phone&&l.consent&&l.stage!=="Sem interesse"?"https://wa.me/"+phone:"";
   const waButton=wa?'<a class="button primary" href="'+wa+'" rel="noopener">Falar pelo WhatsApp</a>':'<p class="note">Configure e confirme o contato antes de publicar os dados de contato.</p>';
   const links=[website?'<a href="'+website+'" rel="noopener">Site atual</a>':"",social?'<a href="'+social+'" rel="noopener">Rede social</a>':""].filter(Boolean).join(" · ");
