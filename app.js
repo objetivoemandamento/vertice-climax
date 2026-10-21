@@ -18,8 +18,9 @@ async function hubRequest(path,options={}){
   return data;
 }
 function queueWorkspaceSync(){
-  if(!sessionStorage.getItem(HUB_TOKEN)||hubBusy)return;
+  if(!sessionStorage.getItem(HUB_TOKEN))return;
   if(hubTimer)clearTimeout(hubTimer);
+  if(hubBusy){hubTimer=setTimeout(()=>queueWorkspaceSync(),1800);return}
   hubTimer=setTimeout(()=>{void syncWorkspaceWithHub(true)},1800);
 }
 async function syncWorkspaceWithHub(silent=false){
