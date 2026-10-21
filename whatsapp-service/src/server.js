@@ -625,7 +625,7 @@ app.post("/webhooks/mercadopago", async (req, res) => {
       return res.status(200).json({ received: true, applied: false, reason: "payment_mismatch_requires_review" });
     }
     const now = new Date().toISOString();
-    lead.stage = "Pago";
+    lead.stage = lead.doNotContact || lead.stage === "Sem interesse" ? "Sem interesse" : "Pago";
     lead.paymentStatus = "approved";
     lead.paymentProvider = "mercadopago";
     lead.paymentId = String(payment.id);
@@ -713,14 +713,20 @@ app.post("/api/projects/:projectId/publish", async (req, res) => {
   const project = hubState.projects.find(item => item.id === req.params.projectId);
   if (!project) return res.status(404).json({ error: "Projeto não encontrado." });
   const lead = hubState.leads.find(item => item.id === project.leadId);
-  if (!lead || lead.paymentStatus !== "approved" || !lead.paymentId || !["Pago", "Site entregue"].includes(lead.stage)) {
+  if (!lead || lead.paymentStatus !== "approved" || !lead.paymentId) {
     return res.status(409).json({ error: "A publicação só é permitida após confirmação real do pagamento pelo webhook." });
   }
   const workspaceKey = "project:" + project.id;
   const workspace = hubState.workspaces[workspaceKey];
   if (!workspace || typeof workspace !== "object") return res.status(409).json({ error: "Workspace do projeto não encontrado; sincronize os arquivos no Studio." });
   let files;
-  try { files = prepareVercelFiles(workspace); }
+  try {
+    const publishableWorkspace = { ...workspace };
+    if (typeof publishableWorkspace["index.html"] === "string") {
+      publishableWorkspace["index.html"] = publishableWorkspace["index.html"].replace('<meta name="robots" content="noindex,nofollow">', '<meta name="robots" content="index,follow">');
+    }
+    files = prepareVercelFiles(publishableWorkspace);
+  }
   catch (error) { return res.status(400).json({ error: error.message }); }
   const slug = project.vercelProjectName || createVercelProjectSlug(project.name, project.id);
   const apiUrl = pathPart => {

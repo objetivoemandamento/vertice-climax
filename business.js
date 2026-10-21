@@ -58,7 +58,7 @@ function render(){
     const actions=element("td");const stack=element("div","row-actions");
     stack.append(button("Selecionar demonstração","",()=>selectDemo(l.id)));
     stack.append(button("Editar","",()=>editLead(l.id)));
-    if(["Pago","Site entregue"].includes(l.stage)){const project=hubProjects.find(item=>item.leadId===l.id);stack.append(button(project?"Abrir projeto":"Criar projeto","",()=>{if(project)window.location.href="./index.html?project="+encodeURIComponent(project.id);else void createProjectFromLead(l.id)}));if(project){const ready=project.publicUrl&&project.publishStatus==="ready";const pending=project.vercelDeploymentId&&["queued","initializing","building"].includes(project.publishStatus);stack.append(button(ready?"Abrir site publicado":pending?"Verificar publicação":"Publicar site","",()=>{if(ready){window.open(project.publicUrl,"_blank","noopener,noreferrer");return}if(pending){void checkClientSiteStatus(project.id,l.id);return}void publishClientSite(project.id,l.id)}));}}
+    if(l.paymentStatus==="approved"&&l.paymentId){const project=hubProjects.find(item=>item.leadId===l.id);stack.append(button(project?"Abrir projeto":"Criar projeto","",()=>{if(project)window.location.href="./index.html?project="+encodeURIComponent(project.id);else void createProjectFromLead(l.id)}));if(project){const ready=project.publicUrl&&project.publishStatus==="ready";const pending=project.vercelDeploymentId&&["queued","initializing","building"].includes(project.publishStatus);stack.append(button(ready?"Abrir site publicado":pending?"Verificar publicação":"Publicar site","",()=>{if(ready){window.open(project.publicUrl,"_blank","noopener,noreferrer");return}if(pending){void checkClientSiteStatus(project.id,l.id);return}void publishClientSite(project.id,l.id)}));}}
     if(["Proposta enviada","Aguardando pagamento"].includes(l.stage)&&l.packageKey){stack.append(button("Gerar link de pagamento","",()=>createPaymentLink(l.id)));}
     stack.append(button("Abrir Maps","",()=>openMaps(l)));
     if(l.consent&&l.consentEvidence&&!l.doNotContact&&l.stage!=="Sem interesse"&&normalizedPhone(l.whatsapp)){
@@ -137,7 +137,7 @@ async function checkClientSiteStatus(projectId,leadId){
   try{
     const result=await agentRequest("/api/projects/"+encodeURIComponent(projectId)+"/publish-status");
     project.publicUrl=result.publicUrl||project.publicUrl;project.publishStatus=result.publishStatus;project.publishError=result.error||null;
-    if(result.publishStatus==="ready"){lead.websiteUrl=project.publicUrl;lead.stage="Site entregue";lead.updatedAt=new Date().toISOString();persist();render();window.open(project.publicUrl,"_blank","noopener,noreferrer");toast("Site publicado e confirmado pela Vercel.");}
+    if(result.publishStatus==="ready"){lead.websiteUrl=project.publicUrl;if(!lead.doNotContact)lead.stage="Site entregue";lead.updatedAt=new Date().toISOString();persist();render();window.open(project.publicUrl,"_blank","noopener,noreferrer");toast("Site publicado e confirmado pela Vercel.");}
     else if(result.publishStatus==="error"){persist();render();toast("A hospedagem informou falha. Revise os arquivos e tente novamente.");}
     else{persist();render();toast("Publicação ainda em andamento: "+result.publishStatus+". Verifique novamente em alguns segundos.");}
   }catch(e){toast("Não foi possível verificar a publicação: "+e.message)}
@@ -149,7 +149,7 @@ async function publishClientSite(projectId,leadId){
   try{
     const result=await agentRequest("/api/projects/"+encodeURIComponent(projectId)+"/publish",{method:"POST",body:JSON.stringify({approved:true})});
     project.publicUrl=result.publicUrl;project.vercelDeploymentId=result.deploymentId;project.publishStatus=result.publishStatus;lead.websiteUrl=result.publicUrl;lead.updatedAt=new Date().toISOString();
-    if(result.publishStatus==="ready"){project.publishedAt=new Date().toISOString();lead.websitePublishedAt=project.publishedAt;lead.stage="Site entregue";}
+    if(result.publishStatus==="ready"){project.publishedAt=new Date().toISOString();lead.websitePublishedAt=project.publishedAt;if(!lead.doNotContact)lead.stage="Site entregue";}
     persist();render();
     if(result.publishStatus==="ready"){window.open(result.publicUrl,"_blank","noopener,noreferrer");toast("Site publicado e confirmado pela Vercel.");}
     else toast("Publicação iniciada. Status do provedor: "+result.publishStatus+". Use Verificar publicação em alguns segundos.");
