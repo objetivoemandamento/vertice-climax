@@ -47,7 +47,7 @@ Não exponha a pasta de dados, o arquivo `.env` ou o token. Faça backups proteg
 
 ### Agente local de respostas
 
-Na página `whatsapp.html`, o agente local fica desativado por padrão. Para usá-lo, conecte a sessão por QR Code, selecione uma conversa individual, marque que o destinatário autorizou mensagens comerciais e que existe registro dessa autorização, e registre a conversa. Depois, ative o agente.
+Na página `whatsapp.html`, o agente local fica desativado por padrão. Para usá-lo, conecte a sessão por QR Code, selecione uma conversa individual, registre a evidência de autorização e habilite o contato. Também é possível registrar um lead autorizado a partir de `business.html`, desde que o WhatsApp esteja no formato internacional completo. Depois, ative o agente.
 
 O agente usa regras locais, não um modelo de linguagem. Ele não inicia conversas nem dispara listas; responde apenas a mensagens recebidas de contatos autorizados. Recusas desativam o contato. Perguntas sobre a origem dos dados, pedidos de demonstração, sinais de compra e mensagens que não correspondem com segurança a uma regra ficam para revisão humana. Isso evita inventar respostas ou prometer entregas que ainda não foram feitas.
 
