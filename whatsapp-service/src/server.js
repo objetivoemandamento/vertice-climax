@@ -54,6 +54,7 @@ const messages = new Map();
 const sendTimes = [];
 const perChatSendTimes = new Map();
 let persistQueue = Promise.resolve();
+let sessionResetPromise = Promise.resolve();
 
 function safeString(value, max = 10000) {
   return typeof value === "string" ? value.slice(0, max) : "";
@@ -198,7 +199,7 @@ async function startWhatsApp() {
         } else {
           qr = null;
           sock = null;
-          void fsp.rm(AUTH_DIR, { recursive: true, force: true })
+          sessionResetPromise = fsp.rm(AUTH_DIR, { recursive: true, force: true })
             .then(() => fsp.mkdir(AUTH_DIR, { recursive: true }))
             .catch(error => console.error("Não foi possível limpar a sessão encerrada:", error.message));
           console.warn("Sessão encerrada pelo WhatsApp. Solicite um novo QR Code para vincular novamente.");
@@ -262,7 +263,10 @@ app.get("/api/status", (_req, res) => res.json({
 }));
 app.get("/api/qr", async (_req, res) => {
   if (connected) return res.json({ connected: true, message: "WhatsApp já conectado" });
-  if (!sock && !connecting) await startWhatsApp();
+  if (!sock && !connecting) {
+    await sessionResetPromise;
+    await startWhatsApp();
+  }
   if (!qr) return res.status(202).json({ message: "QR ainda não disponível; tente novamente em alguns segundos" });
   try {
     return res.json({ connected: false, qrDataUrl: await QRCode.toDataURL(qr, { width: 360, margin: 2 }) });
