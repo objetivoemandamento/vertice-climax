@@ -10,7 +10,7 @@ Serviço Node.js persistente separado do frontend, usando Baileys (biblioteca co
 5. No frontend, abra WhatsApp Web, informe URL e token, clique Obter QR Code e escaneie em WhatsApp → Dispositivos conectados.
 
 ## Hospedagem
-Use serviço Node.js persistente com disco para data/auth. Não use função serverless para manter a sessão ativa. Configure HTTPS, token forte, CORS restrito e proteja a sessão. Nunca publique .env ou data/auth.
+O serviço mantém uma conexão Node.js ativa (não use função serverless). As credenciais Baileys são criptografadas com `HUB_DB_SECRET` e sincronizadas com a tabela `vertice_climax_whatsapp_auth` no Supabase; o cache de conversas/mensagens continua local. Configure HTTPS, token forte e CORS restrito. Nunca publique `.env` ou `data/auth`.
 
 ## Endpoints autenticados
 Todas as rotas /api exigem Authorization: Bearer VERTICE_SERVICE_TOKEN: GET /api/status, GET /api/qr, GET /api/chats, GET /api/messages?chatId=..., POST /api/send com JSON contendo chatId, text e approved:true. /health é público.
@@ -27,3 +27,6 @@ Preços configurados atualmente: Básico (chave `Basico`) R$ 300; Médio (`Medio
 
 
 Após uma confirmação de pagamento aprovada e validada, o backend cria automaticamente o projeto e um rascunho inicial de workspace vinculado ao lead. O rascunho é salvo no núcleo persistente e começa com `noindex,nofollow`; não é uma publicação pública. O cliente/proprietário ainda precisa revisar os textos, completar os dados reais e integrar um provedor de hospedagem antes de divulgar o site.
+
+
+O endpoint `GET /api/status` informa `whatsappAuthPersistence` (`supabase-encrypted` ou `local-only`) e `paymentIntegrationConfigured` sem expor credenciais. Use esses indicadores para conferir se as variáveis de ambiente necessárias estão configuradas.

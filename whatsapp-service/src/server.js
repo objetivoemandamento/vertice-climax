@@ -556,7 +556,9 @@ app.get("/health", (_req, res) => res.json({
   hubLeads: hubState.leads.length,
   hubProjects: hubState.projects.length,
   hubWorkspaces: Object.keys(hubState.workspaces).length,
-  hubUpdatedAt: hubState.updatedAt
+  hubUpdatedAt: hubState.updatedAt,
+  whatsappAuthPersistence: hubDbReady ? "supabase-encrypted" : "local-only",
+  paymentIntegrationConfigured: Boolean(MP_ACCESS_TOKEN && MP_WEBHOOK_SECRET)
 }));
 
 app.post("/webhooks/mercadopago", async (req, res) => {
@@ -772,7 +774,9 @@ app.get("/api/status", (_req, res) => res.json({
   user: connected && user ? { id: user.id, name: user.name } : null,
   message: connected ? "WhatsApp conectado" : connecting ? "Conectando ao WhatsApp" : "Aguardando QR Code",
   lastConnectionError,
-  automationEnabled
+  automationEnabled,
+  whatsappAuthPersistence: hubDbReady ? "supabase-encrypted" : "local-only",
+  paymentIntegrationConfigured: Boolean(MP_ACCESS_TOKEN && MP_WEBHOOK_SECRET)
 }));
 app.get("/api/automation", (_req, res) => res.json({
   enabled: automationEnabled,
