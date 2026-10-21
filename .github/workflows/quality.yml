@@ -25,8 +25,11 @@ jobs:
         run: |
           node --check src/server.js
           node --check src/local-agent.js
+          node --check src/mercadopago.js
+          node --check src/whatsapp-auth-crypto.js
           node --check test/local-agent.test.js
           node --check test/mercadopago.test.js
+          node --check test/whatsapp-auth-crypto.test.js
           node --check scripts/smoke-test.mjs
       - name: Run local agent unit tests
         run: npm test

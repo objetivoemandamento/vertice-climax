@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import crypto from "node:crypto";
 import { classifyIncomingMessage } from "./local-agent.js";
 import { verifyMercadoPagoSignature, getPackagePrice, isMatchingApprovedPayment } from "./mercadopago.js";
+import { encryptAuthFiles, decryptAuthFiles } from "./whatsapp-auth-crypto.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -67,6 +68,8 @@ const sendTimes = [];
 const perChatSendTimes = new Map();
 let persistQueue = Promise.resolve();
 let sessionResetPromise = Promise.resolve();
+let authPersistTimer = null;
+let authPersistQueue = Promise.resolve();
 let automationEnabled = false;
 const automationContacts = new Map();
 const processedAutoMessageIds = new Set();
@@ -151,6 +154,53 @@ function createPaidProjectWorkspace(lead, now) {
   };
   hubState.workspaceUpdatedAt[workspaceKey] = now;
   return project;
+}
+
+
+async function persistWhatsAppAuthToDb() {
+  if (!hubDbReady) return;
+  const entries = await fsp.readdir(AUTH_DIR, { withFileTypes: true });
+  const files = {};
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith(".json") || entry.name.includes("/") || entry.name.includes("\\\\")) continue;
+    files[entry.name] = await fsp.readFile(path.join(AUTH_DIR, entry.name), "utf8");
+  }
+  if (!Object.keys(files).length) return;
+  const encrypted = encryptAuthFiles(files, HUB_DB_SECRET);
+  await hubDbRpc("vertice_climax_put_whatsapp_auth", { p_payload: encrypted });
+}
+async function loadWhatsAppAuthFromDb() {
+  if (!hubDbReady) return;
+  let encrypted;
+  try {
+    encrypted = await hubDbRpc("vertice_climax_get_whatsapp_auth", {});
+  } catch (error) {
+    console.warn("Persistência remota da sessão WhatsApp indisponível; mantendo o armazenamento local:", error.message);
+    return;
+  }
+  if (typeof encrypted === "string" && encrypted) {
+    const files = decryptAuthFiles(encrypted, HUB_DB_SECRET);
+    await fsp.mkdir(AUTH_DIR, { recursive: true });
+    for (const entry of await fsp.readdir(AUTH_DIR, { withFileTypes: true })) {
+      if (entry.isFile() && entry.name.endsWith(".json")) await fsp.rm(path.join(AUTH_DIR, entry.name), { force: true });
+    }
+    for (const [name, content] of Object.entries(files)) {
+      await fsp.writeFile(path.join(AUTH_DIR, name), content, { mode: 0o600 });
+    }
+    console.log("Sessão WhatsApp restaurada do armazenamento persistente criptografado.");
+    return;
+  }
+  await persistWhatsAppAuthToDb();
+}
+function scheduleWhatsAppAuthPersist() {
+  if (!hubDbReady) return;
+  if (authPersistTimer) clearTimeout(authPersistTimer);
+  authPersistTimer = setTimeout(() => {
+    authPersistTimer = null;
+    authPersistQueue = authPersistQueue
+      .then(() => persistWhatsAppAuthToDb())
+      .catch(error => console.error("Falha ao persistir sessão WhatsApp criptografada:", error.message));
+  }, 1200);
 }
 
 function hubStateSnapshot() {
@@ -392,6 +442,16 @@ async function startWhatsApp() {
   lastConnectionError = null;
   try {
     const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
+    const originalKeySet = state.keys.set.bind(state.keys);
+    state.keys.set = async data => {
+      const result = await originalKeySet(data);
+      scheduleWhatsAppAuthPersist();
+      return result;
+    };
+    const saveCredsAndPersist = async () => {
+      await saveCreds();
+      scheduleWhatsAppAuthPersist();
+    };
     let version;
     try {
       ({ version } = await fetchLatestBaileysVersion());
@@ -406,7 +466,7 @@ async function startWhatsApp() {
       syncFullHistory: false,
       getMessage: async () => undefined
     });
-    sock.ev.on("creds.update", saveCreds);
+    sock.ev.on("creds.update", saveCredsAndPersist);
     sock.ev.on("connection.update", ({ connection, qr: newQr, lastDisconnect }) => {
       if (newQr) qr = newQr;
       if (connection === "open") {
@@ -416,6 +476,7 @@ async function startWhatsApp() {
         user = sock?.user || null;
         lastConnectionError = null;
         console.log("WhatsApp conectado");
+        scheduleWhatsAppAuthPersist();
       }
       if (connection === "close") {
         connected = false;
@@ -824,6 +885,9 @@ async function shutdown(signal) {
   console.log("Encerrando serviço (" + signal + ")...");
   try {
     await persistStore();
+    if (authPersistTimer) { clearTimeout(authPersistTimer); authPersistTimer = null; }
+    await authPersistQueue;
+    await persistWhatsAppAuthToDb();
     if (sock) sock.end(undefined);
   } catch (error) {
     console.error("Erro durante encerramento:", error.message);
@@ -836,6 +900,7 @@ process.on("SIGINT", () => void shutdown("SIGINT"));
 await loadStore();
 try {
   await loadHubStateDb();
+  await loadWhatsAppAuthFromDb();
 } catch (error) {
   console.error("Falha ao carregar banco central persistente:", error.message);
   process.exit(1);
