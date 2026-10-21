@@ -8,6 +8,7 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import crypto from "node:crypto";
+import { classifyIncomingMessage } from "./local-agent.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -55,6 +56,9 @@ const sendTimes = [];
 const perChatSendTimes = new Map();
 let persistQueue = Promise.resolve();
 let sessionResetPromise = Promise.resolve();
+let automationEnabled = false;
+const automationContacts = new Map();
+const processedAutoMessageIds = new Set();
 
 function safeString(value, max = 10000) {
   return typeof value === "string" ? value.slice(0, max) : "";
@@ -76,7 +80,10 @@ function persistStore() {
     version: 1,
     savedAt: new Date().toISOString(),
     chats: [...chats.values()].slice(-CHAT_LIMIT),
-    messages: [...messages.entries()].map(([id, items]) => [id, items.slice(-MESSAGE_LIMIT)]).slice(-CHAT_LIMIT)
+    messages: [...messages.entries()].map(([id, items]) => [id, items.slice(-MESSAGE_LIMIT)]).slice(-CHAT_LIMIT),
+    automationEnabled,
+    automationContacts: [...automationContacts.values()].slice(-CHAT_LIMIT),
+    processedAutoMessageIds: [...processedAutoMessageIds].slice(-2000)
   });
   persistQueue = persistQueue.then(async () => {
     const tmp = STORE_FILE + ".tmp";
@@ -97,6 +104,13 @@ async function loadStore() {
       if (Array.isArray(pair) && typeof pair[0] === "string" && Array.isArray(pair[1])) {
         messages.set(pair[0], pair[1].slice(-MESSAGE_LIMIT));
       }
+    }
+    automationEnabled = data.automationEnabled === true;
+    for (const contact of Array.isArray(data.automationContacts) ? data.automationContacts.slice(-CHAT_LIMIT) : []) {
+      if (contact && typeof contact.chatId === "string") automationContacts.set(contact.chatId, contact);
+    }
+    for (const id of Array.isArray(data.processedAutoMessageIds) ? data.processedAutoMessageIds.slice(-2000) : []) {
+      if (typeof id === "string") processedAutoMessageIds.add(id);
     }
     console.log("Cache local restaurado:", chats.size, "conversas");
   } catch (error) {
@@ -144,6 +158,54 @@ function timingSafeToken(req) {
 function requireAuth(req, res, next) {
   if (!timingSafeToken(req)) return res.status(401).json({ error: "Token inválido ou ausente" });
   next();
+}
+async function processIncomingAutomation(jid, message) {
+  const id = message?.key?.id;
+  if (!automationEnabled || !jid || !jid.endsWith("@s.whatsapp.net") || message?.key?.fromMe || !id || processedAutoMessageIds.has(id)) return;
+  const contact = automationContacts.get(jid);
+  if (!contact || contact.consent !== true || contact.enabled !== true) return;
+  const text = safeString(extractText(message), 10000);
+  if (!text.trim()) return;
+  processedAutoMessageIds.add(id);
+  while (processedAutoMessageIds.size > 2000) processedAutoMessageIds.delete(processedAutoMessageIds.values().next().value);
+  const decision = classifyIncomingMessage(text, contact.stage || "inicio");
+  contact.lastInboundAt = Date.now();
+  contact.lastReason = decision.reason || null;
+  contact.stage = decision.stage || contact.stage || "inicio";
+  contact.needsHuman = decision.action === "human_review";
+  if (decision.action === "opt_out") {
+    contact.enabled = false;
+    contact.consent = false;
+    contact.stage = "Sem interesse";
+  }
+  void persistStore();
+  if (!decision.reply || !["reply", "opt_out"].includes(decision.action)) {
+    if (contact.needsHuman) console.log("Agente local aguardando revisão humana para", jid);
+    return;
+  }
+  if (!sendRateLimit(jid)) {
+    contact.needsHuman = true;
+    contact.lastReason = "Limite de envio atingido; resposta automática não enviada.";
+    void persistStore();
+    return;
+  }
+  try {
+    const sent = await sock.sendMessage(jid, { text: decision.reply });
+    cacheMessage(jid, {
+      key: { id: sent?.key?.id || crypto.randomUUID(), fromMe: true, remoteJid: jid },
+      message: { conversation: decision.reply },
+      messageTimestamp: Date.now() / 1000
+    });
+    contact.lastAutoReplyAt = Date.now();
+    contact.needsHuman = false;
+    void persistStore();
+    console.log("Resposta local enviada para conversa autorizada:", jid, "ação:", decision.action);
+  } catch (error) {
+    contact.needsHuman = true;
+    contact.lastReason = "Falha ao enviar resposta automática.";
+    void persistStore();
+    console.error("Resposta automática falhou:", error.message);
+  }
 }
 function sendRateLimit(chatId) {
   const now = Date.now();
@@ -233,8 +295,12 @@ async function startWhatsApp() {
       }
       void persistStore();
     });
-    sock.ev.on("messages.upsert", ({ messages: incoming }) => {
-      for (const message of incoming || []) cacheMessage(message.key?.remoteJid, message);
+    sock.ev.on("messages.upsert", ({ messages: incoming, type }) => {
+      for (const message of incoming || []) {
+        const jid = message.key?.remoteJid;
+        cacheMessage(jid, message);
+        if (type === "notify" && !message.key?.fromMe) void processIncomingAutomation(jid, message);
+      }
     });
   } catch (error) {
     connecting = false;
@@ -259,8 +325,60 @@ app.get("/api/status", (_req, res) => res.json({
   qrAvailable: Boolean(qr),
   user: connected && user ? { id: user.id, name: user.name } : null,
   message: connected ? "WhatsApp conectado" : connecting ? "Conectando ao WhatsApp" : "Aguardando QR Code",
-  lastConnectionError
+  lastConnectionError,
+  automationEnabled
 }));
+app.get("/api/automation", (_req, res) => res.json({
+  enabled: automationEnabled,
+  contacts: [...automationContacts.values()].map(contact => ({
+    chatId: contact.chatId,
+    name: contact.name,
+    consent: contact.consent,
+    enabled: contact.enabled,
+    stage: contact.stage,
+    needsHuman: contact.needsHuman || false,
+    lastReason: contact.lastReason || null
+  }))
+}));
+app.post("/api/automation/config", (req, res) => {
+  if (typeof req.body?.enabled !== "boolean") return res.status(400).json({ error: "enabled deve ser booleano" });
+  automationEnabled = req.body.enabled;
+  void persistStore();
+  return res.json({ ok: true, enabled: automationEnabled });
+});
+app.post("/api/automation/contacts", (req, res) => {
+  const { chatId, name, consent } = req.body || {};
+  if (typeof chatId !== "string" || !chatId.endsWith("@s.whatsapp.net") || chatId.length > 180) {
+    return res.status(400).json({ error: "Selecione uma conversa individual válida" });
+  }
+  if (consent !== true) return res.status(400).json({ error: "É necessário registrar autorização válida antes de ativar respostas automáticas" });
+  const old = automationContacts.get(chatId) || {};
+  const contact = {
+    ...old,
+    chatId,
+    name: safeString(name, 120) || chats.get(chatId)?.name || chatId,
+    consent: true,
+    enabled: true,
+    stage: old.stage || "inicio",
+    updatedAt: Date.now(),
+    needsHuman: false
+  };
+  automationContacts.set(chatId, contact);
+  void persistStore();
+  return res.json({ ok: true, contact: { chatId: contact.chatId, name: contact.name, enabled: contact.enabled, stage: contact.stage } });
+});
+app.delete("/api/automation/contacts/:chatId", (req, res) => {
+  let chatId;
+  try { chatId = decodeURIComponent(req.params.chatId); } catch { return res.status(400).json({ error: "chatId inválido" }); }
+  const contact = automationContacts.get(chatId);
+  if (!contact) return res.status(404).json({ error: "Contato do agente não encontrado" });
+  contact.enabled = false;
+  contact.consent = false;
+  contact.stage = "Desativado";
+  contact.updatedAt = Date.now();
+  void persistStore();
+  return res.json({ ok: true, message: "Agente desativado para este contato" });
+});
 app.get("/api/qr", async (_req, res) => {
   if (connected) return res.json({ connected: true, message: "WhatsApp já conectado" });
   if (!sock && !connecting) {
