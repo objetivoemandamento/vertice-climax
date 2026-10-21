@@ -512,6 +512,9 @@ app.post("/api/payments/preference", async (req, res) => {
   }
   const price = getPackagePrice(lead.packageKey);
   if (price === null) return res.status(400).json({ error: "Selecione um pacote válido antes de gerar o pagamento." });
+  if (lead.paymentStatus === "pending" && lead.paymentPreferenceId && lead.paymentInitPoint) {
+    return res.json({ ok: true, preferenceId: lead.paymentPreferenceId, initPoint: lead.paymentInitPoint, amount: price, currency: "BRL", reused: true });
+  }
   if (["Pago", "Site entregue"].includes(lead.stage)) return res.status(409).json({ error: "Este projeto já está marcado como pago." });
   try {
     const preferenceResponse = await fetch("https://api.mercadopago.com/checkout/preferences", {
@@ -542,6 +545,7 @@ app.post("/api/payments/preference", async (req, res) => {
     lead.stage = "Aguardando pagamento";
     lead.paymentProvider = "mercadopago";
     lead.paymentPreferenceId = String(preference.id);
+    lead.paymentInitPoint = String(preference.init_point);
     lead.paymentStatus = "pending";
     lead.paymentReviewRequired = false;
     lead.updatedAt = new Date().toISOString();

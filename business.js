@@ -131,7 +131,7 @@ async function createPaymentLink(id){
     const result=await agentRequest("/api/payments/preference",{method:"POST",body:JSON.stringify({leadId:lead.id})});
     if(!result.initPoint)throw Error("O provedor não retornou um link de pagamento.");
     lead.stage="Aguardando pagamento";lead.paymentProvider="mercadopago";lead.paymentPreferenceId=String(result.preferenceId||"");lead.paymentStatus="pending";lead.updatedAt=new Date().toISOString();
-    persist();render();window.open(result.initPoint,"_blank","noopener,noreferrer");
+    persist();render();window.location.assign(result.initPoint);
     toast("Link de pagamento criado. O CRM será atualizado quando o webhook confirmar o recebimento.");
   }catch(e){toast("Não foi possível gerar o pagamento: "+e.message)}
 }
@@ -267,4 +267,8 @@ $("#agent-save").addEventListener("click",async()=>{
 });
 $("#hub-sync").addEventListener("click",()=>syncHubState(false));
 render();updateDemo();
+const paymentReturn=new URLSearchParams(location.search).get("payment");
+if(paymentReturn==="success")toast("Checkout retornou com sucesso, mas o CRM só marcará Pago após a confirmação oficial do webhook.");
+else if(paymentReturn==="pending")toast("Pagamento pendente. O CRM será atualizado quando o provedor confirmar.");
+else if(paymentReturn==="failure")toast("O checkout informou que o pagamento não foi concluído. Você pode gerar um novo link.");
 })();
