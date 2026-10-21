@@ -2,6 +2,9 @@
 "use strict";
 const $=s=>document.querySelector(s);
 const STORE="vertice_climax_business_leads_v1";
+const AGENT_URL_KEY="vertice_wa_service_url";
+const AGENT_TOKEN_KEY="vertice_wa_service_token";
+const DEFAULT_AGENT_URL=(location.hostname==="localhost"||location.hostname==="127.0.0.1")?"http://127.0.0.1:8787":"https://vertice-climax-whatsapp.onrender.com";
 const STAGES=["Novo","Pesquisado","Contato autorizado","Em conversa","Interessado","Proposta enviada","Aguardando pagamento","Pago","Site entregue","Sem interesse"];
 const PACKAGES={Basico:{name:"Básico",price:300},Medio:{name:"Médio",price:700},Avancado:{name:"Avançado",price:2000}};
 let leads=load(),activeDemoId=null;
@@ -48,8 +51,8 @@ function render(){
     stack.append(button("Selecionar demonstração","",()=>selectDemo(l.id)));
     stack.append(button("Editar","",()=>editLead(l.id)));
     stack.append(button("Abrir Maps","",()=>openMaps(l)));
-    if(l.consent&&l.stage!=="Sem interesse"&&normalizedPhone(l.whatsapp)){
-      const a=element("a","button","Abrir WhatsApp");a.href="https://wa.me/"+normalizedPhone(l.whatsapp);a.target="_blank";a.rel="noopener noreferrer";a.title="Abre o contato; não envia mensagem automaticamente";stack.append(a);
+    if(l.consent&&l.consentEvidence&&!l.doNotContact&&l.stage!=="Sem interesse"&&normalizedPhone(l.whatsapp)){
+      const a=element("a","button","Abrir WhatsApp");a.href="https://wa.me/"+normalizedPhone(l.whatsapp);a.target="_blank";a.rel="noopener noreferrer";a.title="Abre o contato; não envia mensagem automaticamente";stack.append(a);\n      if(normalizedPhone(l.whatsapp).length>=12&&normalizedPhone(l.whatsapp).length<=15)stack.append(button("Registrar no agente","",()=>registerLeadWithAgent(l.id)));
     }
     stack.append(button("Excluir","",()=>deleteLead(l.id)));
     actions.append(stack);tr.append(actions);body.append(tr);
@@ -68,15 +71,15 @@ function resetForm(){
 function editLead(id){
   const l=leads.find(x=>x.id===id);if(!l)return;
   $("#lead-id").value=l.id;$("#lead-name").value=l.name||"";$("#lead-segment").value=l.segment||"";$("#lead-location").value=l.location||"";
-  $("#lead-phone").value=l.phone||"";$("#lead-whatsapp").value=l.whatsapp||"";$("#lead-website").value=l.website||"";$("#lead-social").value=l.social||"";$("#lead-source").value=l.source||"";
+  $("#lead-phone").value=l.phone||"";$("#lead-whatsapp").value=l.whatsapp||"";$("#lead-website").value=l.website||"";$("#lead-social").value=l.social||"";$("#lead-source").value=l.source||"";$("#lead-consent-evidence").value=l.consentEvidence||"";
   $("#lead-stage").value=l.stage||"Novo";$("#lead-package").value=l.packageKey||"";$("#lead-notes").value=l.notes||"";$("#lead-consent").checked=Boolean(l.consent);
   $("#form-title").textContent="Editar empresa";$("#save-lead").textContent="Salvar alterações";$("#cancel-edit").hidden=false;
   window.scrollTo({top:0,behavior:"smooth"});
 }
 function saveLead(e){
   e.preventDefault();
-  const id=value("lead-id"),existing=leads.find(x=>x.id===id),stage=value("lead-stage"),consent=$("#lead-consent").checked;
-  if(stage==="Contato autorizado"&&!consent){toast("Marque autorização somente se ela realmente existir.");return}
+  const id=value("lead-id"),existing=leads.find(x=>x.id===id),stage=value("lead-stage"),consent=$("#lead-consent").checked,consentEvidence=value("lead-consent-evidence");
+  if(stage==="Contato autorizado"&&!consent){toast("Marque autorização somente se ela realmente existir.");return}\n  if(consent&&!consentEvidence){toast("Registre a data ou referência da autorização antes de marcar o consentimento.");return}
   if(stage==="Sem interesse"&&consent){toast("Contato marcado sem interesse não pode permanecer autorizado.");return}
   if(existing?.doNotContact&&stage!=="Sem interesse"){toast("Este registro está bloqueado por recusa. Não reative automaticamente o contato.");return}
   const data={
@@ -93,7 +96,15 @@ function saveLead(e){
 }
 function deleteLead(id){
   const l=leads.find(x=>x.id===id);if(!l||!confirm("Excluir "+l.name+" deste navegador?"))return;
-  leads=leads.filter(x=>x.id!==id);if(activeDemoId===id)activeDemoId=null;persist();render();updateDemo();toast("Registro excluído");
+  leads=leads.filter(x=>x.id!==id);if(activeDemoId===id)activeDemoId=null;persist();$("#agent-service-url").value=localStorage.getItem(AGENT_URL_KEY)||DEFAULT_AGENT_URL;
+$("#agent-token").value=sessionStorage.getItem(AGENT_TOKEN_KEY)||"";
+$("#agent-save").addEventListener("click",async()=>{
+  const url=$("#agent-service-url").value.trim().replace(/\\/+$/,""),token=$("#agent-token").value.trim();
+  if(!url||!token){$("#agent-connect-status").textContent="Informe a URL e o token.";return}
+  localStorage.setItem(AGENT_URL_KEY,url);sessionStorage.setItem(AGENT_TOKEN_KEY,token);
+  await checkAgentHealth();
+});
+render();updateDemo();toast("Registro excluído");
 }
 function selectDemo(id){activeDemoId=id;updateDemo()}
 function updateDemo(){
@@ -106,7 +117,7 @@ function openMaps(l){
   window.open("https://www.google.com/maps/search/"+encodeURIComponent(query),"_blank","noopener,noreferrer");
 }
 function exportCSV(){
-  const cols=["name","segment","location","phone","whatsapp","website","social","source","stage","packageKey","consent","doNotContact","notes","createdAt","updatedAt"];
+  const cols=["name","segment","location","phone","whatsapp","website","social","source","stage","packageKey","consent","consentEvidence","doNotContact","notes","createdAt","updatedAt"];
   const rows=[cols.join(","),...leads.map(l=>cols.map(k=>csvCell(l[k])).join(","))];
   download(new Blob(["\uFEFF"+rows.join("\r\n")],{type:"text/csv;charset=utf-8"}),"vertice-climax-leads.csv");
 }
@@ -124,6 +135,34 @@ async function importBackup(e){
   }catch(err){toast("Falha ao restaurar: "+err.message)}finally{e.target.value=""}
 }
 function safeHttpUrl(value){const v=String(value||"").trim();const lower=v.toLowerCase();return lower.startsWith("https://")||lower.startsWith("http://")?esc(v):""}
+async function agentRequest(path,options={}){
+  const base=($("#agent-service-url").value||"").trim().replace(/\\/+$/,"");
+  const token=$("#agent-token").value.trim();
+  if(!base)throw Error("Informe a URL do serviço WhatsApp.");
+  if(!token)throw Error("Informe o token do serviço.");
+  const headers={Authorization:"Bearer "+token};
+  if(options.body)headers["Content-Type"]="application/json";
+  const response=await fetch(base+path,{...options,headers:{...headers,...(options.headers||{})}});
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok)throw Error(data.error||data.message||"HTTP "+response.status);
+  return data;
+}
+async function checkAgentHealth(){
+  const status=$("#agent-connect-status");
+  try{const d=await agentRequest("/api/status");status.textContent=d.connected?"WhatsApp conectado. Agente: "+(d.automationEnabled?"ativo":"desativado")+".":"Serviço acessível; WhatsApp ainda não conectado."}
+  catch(e){status.textContent="Conexão não validada: "+e.message}
+}
+async function registerLeadWithAgent(id){
+  const lead=leads.find(l=>l.id===id);if(!lead)return;
+  if(!lead.consent||!lead.consentEvidence||lead.doNotContact||lead.stage==="Sem interesse"){toast("É necessário consentimento registrado e ausência de recusa.");return}
+  const digits=normalizedPhone(lead.whatsapp);
+  if(digits.length<12||digits.length>15){toast("Informe o WhatsApp confirmado com código do país, DDD e número.");return}
+  if(!confirm("Registrar "+lead.name+" no agente local? Ele não enviará a primeira mensagem; poderá responder somente a mensagens recebidas após a ativação do agente."))return;
+  try{
+    await agentRequest("/api/automation/contacts",{method:"POST",body:JSON.stringify({chatId:digits+"@s.whatsapp.net",name:lead.name,consent:true,consentEvidence:lead.consentEvidence})});
+    lead.agentRegisteredAt=new Date().toISOString();persist();render();toast("Contato autorizado registrado no agente.");
+  }catch(e){toast("Não foi possível registrar: "+e.message)}
+}
 function demoHtml(l){
   const name=esc(l.name),segment=esc(l.segment||"Negócio local"),location=esc(l.location||"Localização a confirmar");
   const packageName=esc(packageLabel(l.packageKey)),website=safeHttpUrl(l.website),social=safeHttpUrl(l.social);
