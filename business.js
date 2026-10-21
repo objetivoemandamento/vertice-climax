@@ -7,10 +7,10 @@ const AGENT_TOKEN_KEY="vertice_wa_service_token";
 const DEFAULT_AGENT_URL=(location.hostname==="localhost"||location.hostname==="127.0.0.1")?"http://127.0.0.1:8787":"https://vertice-climax-whatsapp.onrender.com";
 const STAGES=["Novo","Pesquisado","Contato autorizado","Em conversa","Interessado","Proposta enviada","Aguardando pagamento","Pago","Site entregue","Sem interesse"];
 const PACKAGES={Basico:{name:"Básico",price:300},Medio:{name:"Médio",price:700},Avancado:{name:"Avançado",price:2000}};
-let leads=load(),activeDemoId=null;
+let leads=load(),activeDemoId=null,syncTimer=null,syncBusy=false;
 function uid(){return (crypto.randomUUID?crypto.randomUUID():Date.now().toString(36)+Math.random().toString(36).slice(2))}
 function load(){try{const x=JSON.parse(localStorage.getItem(STORE)||"[]");return Array.isArray(x)?x.filter(v=>v&&typeof v.id==="string"&&typeof v.name==="string"):[]}catch{return []}}
-function persist(){try{localStorage.setItem(STORE,JSON.stringify(leads));return true}catch(e){toast("Não foi possível salvar. Exporte um backup e libere espaço no navegador.");return false}}
+function persist(){try{localStorage.setItem(STORE,JSON.stringify(leads));queueHubSync();return true}catch(e){toast("Não foi possível salvar. Exporte um backup e libere espaço no navegador.");return false}}
 function toast(s){const el=$("#toast");el.textContent=s;el.classList.add("show");window.setTimeout(()=>el.classList.remove("show"),3000)}
 function value(id){return $("#"+id).value.trim()}
 function packageLabel(key){return PACKAGES[key]?PACKAGES[key].name+" — "+money(PACKAGES[key].price):"Não definido"}
@@ -141,6 +141,45 @@ async function agentRequest(path,options={}){
   if(!response.ok)throw Error(data.error||data.message||"HTTP "+response.status);
   return data;
 }
+function queueHubSync(){
+  if(!sessionStorage.getItem(AGENT_TOKEN_KEY)||syncBusy)return;
+  if(syncTimer)clearTimeout(syncTimer);
+  syncTimer=setTimeout(()=>{void syncHubState(true)},1200);
+}
+function mergeById(localItems,remoteItems){
+  const map=new Map();
+  for(const item of [...(Array.isArray(remoteItems)?remoteItems:[]),...(Array.isArray(localItems)?localItems:[])]){
+    if(!item||typeof item.id!=="string")continue;
+    const previous=map.get(item.id);
+    const a=Date.parse(previous?.updatedAt||previous?.createdAt||0)||0;
+    const b=Date.parse(item.updatedAt||item.createdAt||0)||0;
+    if(!previous||b>=a)map.set(item.id,item);
+  }
+  return [...map.values()].sort((a,b)=>(Date.parse(b.updatedAt||b.createdAt||0)||0)-(Date.parse(a.updatedAt||a.createdAt||0)||0));
+}
+async function syncHubState(silent=false){
+  if(syncBusy)return;
+  if(!sessionStorage.getItem(AGENT_TOKEN_KEY)){if(!silent)toast("Valide a conexão e informe o token antes de sincronizar.");return}
+  syncBusy=true;
+  const status=$("#agent-connect-status");
+  try{
+    if(status)status.textContent="Conectando ao núcleo central e conciliando dados…";
+    const remote=await agentRequest("/api/hub/state");
+    const mergedLeads=mergeById(leads,remote.leads);
+    const changed=JSON.stringify(mergedLeads)!==JSON.stringify(leads);
+    leads=mergedLeads;
+    try{localStorage.setItem(STORE,JSON.stringify(leads))}catch{}
+    const payload={leads,projects:Array.isArray(remote.projects)?remote.projects:[],workspaces:remote.workspaces&&typeof remote.workspaces==="object"?remote.workspaces:{}};
+    const saved=await agentRequest("/api/hub/state",{method:"PUT",body:JSON.stringify(payload)});
+    if(changed)render();
+    if(status)status.textContent="Núcleo sincronizado · "+saved.counts.leads+" leads · "+saved.counts.projects+" projetos · "+saved.counts.workspaces+" workspaces · "+new Date(saved.updatedAt).toLocaleTimeString("pt-BR");
+    if(!silent)toast("Sincronização central concluída.");
+    return saved;
+  }catch(e){
+    if(status)status.textContent="Sincronização indisponível: "+e.message+" · os dados locais foram preservados.";
+    if(!silent)toast("Falha ao sincronizar: "+e.message);
+  }finally{syncBusy=false}
+}
 async function checkAgentHealth(){
   const status=$("#agent-connect-status");
   try{const d=await agentRequest("/api/status");status.textContent=d.connected?"WhatsApp conectado. Agente: "+(d.automationEnabled?"ativo":"desativado")+".":"Serviço acessível; WhatsApp ainda não conectado."}
@@ -184,7 +223,8 @@ $("#agent-save").addEventListener("click",async()=>{
   const urlRaw=$("#agent-service-url").value.trim();let url=urlRaw;while(url.endsWith("/"))url=url.slice(0,-1);const token=$("#agent-token").value.trim();
   if(!url||!token){$("#agent-connect-status").textContent="Informe a URL e o token.";return}
   localStorage.setItem(AGENT_URL_KEY,url);sessionStorage.setItem(AGENT_TOKEN_KEY,token);
-  await checkAgentHealth();
+  await checkAgentHealth();await syncHubState(true);
 });
+$("#hub-sync").addEventListener("click",()=>syncHubState(false));
 render();updateDemo();
 })();
