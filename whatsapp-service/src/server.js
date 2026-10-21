@@ -11,6 +11,7 @@ import crypto from "node:crypto";
 import { classifyIncomingMessage } from "./local-agent.js";
 import { verifyMercadoPagoSignature, getPackagePrice, isMatchingApprovedPayment } from "./mercadopago.js";
 import { encryptAuthFiles, decryptAuthFiles } from "./whatsapp-auth-crypto.js";
+import { createVercelProjectSlug, prepareVercelFiles } from "./vercel-publish.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -30,6 +31,8 @@ const MP_ACCESS_TOKEN = process.env.MERCADOPAGO_ACCESS_TOKEN || "";
 const MP_WEBHOOK_SECRET = process.env.MERCADOPAGO_WEBHOOK_SECRET || "";
 const PUBLIC_SERVICE_URL = (process.env.PUBLIC_SERVICE_URL || "https://vertice-climax-whatsapp.onrender.com").replace(/\/+$/, "");
 const FRONTEND_PUBLIC_URL = (process.env.FRONTEND_ORIGIN || "https://vertice-climax.onrender.com").split(",")[0].trim().replace(/\/+$/, "");
+const VERCEL_TOKEN = process.env.VERCEL_TOKEN || "";
+const VERCEL_TEAM_ID = process.env.VERCEL_TEAM_ID || "";
 const hubDbReady = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY && HUB_DB_SECRET);
 
 
@@ -689,6 +692,92 @@ app.post("/api/payments/preference", async (req, res) => {
   } catch (error) {
     console.error("Falha ao criar link de pagamento:", error.message);
     return res.status(502).json({ error: "Não foi possível concluir a solicitação de pagamento." });
+  }
+});
+
+
+app.post("/api/projects/:projectId/publish", async (req, res) => {
+  if (!VERCEL_TOKEN) return res.status(503).json({ error: "Configure VERCEL_TOKEN no backend para ativar a publicação." });
+  if (req.body?.approved !== true) return res.status(400).json({ error: "Aprovação explícita de publicação obrigatória." });
+  const project = hubState.projects.find(item => item.id === req.params.projectId);
+  if (!project) return res.status(404).json({ error: "Projeto não encontrado." });
+  const lead = hubState.leads.find(item => item.id === project.leadId);
+  if (!lead || lead.paymentStatus !== "approved" || !lead.paymentId || !["Pago", "Site entregue"].includes(lead.stage)) {
+    return res.status(409).json({ error: "A publicação só é permitida após confirmação real do pagamento pelo webhook." });
+  }
+  const workspaceKey = "project:" + project.id;
+  const workspace = hubState.workspaces[workspaceKey];
+  if (!workspace || typeof workspace !== "object") return res.status(409).json({ error: "Workspace do projeto não encontrado; sincronize os arquivos no Studio." });
+  let files;
+  try { files = prepareVercelFiles(workspace); }
+  catch (error) { return res.status(400).json({ error: error.message }); }
+  const slug = project.vercelProjectName || createVercelProjectSlug(project.name, project.id);
+  const apiUrl = pathPart => {
+    const url = new URL("https://api.vercel.com" + pathPart);
+    if (VERCEL_TEAM_ID) url.searchParams.set("teamId", VERCEL_TEAM_ID);
+    return url;
+  };
+  const headers = { Authorization: "Bearer " + VERCEL_TOKEN, "Content-Type": "application/json", Accept: "application/json" };
+  try {
+    if (!project.vercelProjectId) {
+      let createResponse = await fetch(apiUrl("/v11/projects"), {
+        method: "POST", headers,
+        body: JSON.stringify({ name: slug, framework: null, buildCommand: null, installCommand: null, outputDirectory: null, rootDirectory: null, publicSource: false })
+      });
+      let vercelProject = await createResponse.json().catch(() => ({}));
+      if (createResponse.status === 409) {
+        const lookup = await fetch(apiUrl("/v9/projects/" + encodeURIComponent(slug)), { headers: { Authorization: "Bearer " + VERCEL_TOKEN, Accept: "application/json" } });
+        if (lookup.ok) { vercelProject = await lookup.json(); createResponse = lookup; }
+      }
+      if (!createResponse.ok || !vercelProject.id) {
+        console.error("Vercel não criou o projeto:", createResponse.status);
+        return res.status(502).json({ error: "Não foi possível preparar o projeto na hospedagem. Confira token e limites da conta." });
+      }
+      project.vercelProjectId = String(vercelProject.id);
+      project.vercelProjectName = slug;
+      project.updatedAt = new Date().toISOString();
+      await persistStore();
+      await persistHubStateDb();
+    }
+    const deployResponse = await fetch(apiUrl("/v13/deployments?skipAutoDetectionConfirmation=1&forceNew=1"), {
+      method: "POST", headers,
+      body: JSON.stringify({
+        name: slug,
+        project: project.vercelProjectId,
+        target: "production",
+        files,
+        projectSettings: { framework: null, buildCommand: null, devCommand: null, installCommand: null, outputDirectory: null }
+      })
+    });
+    const deployment = await deployResponse.json().catch(() => ({}));
+    if (!deployResponse.ok || !deployment.url || !deployment.id) {
+      console.error("Vercel recusou a publicação:", deployResponse.status);
+      project.publishStatus = "failed";
+      project.publishError = "Falha do provedor; verifique as configurações e os limites da conta.";
+      project.updatedAt = new Date().toISOString();
+      await persistStore();
+      await persistHubStateDb();
+      return res.status(502).json({ error: project.publishError });
+    }
+    const rawUrl = Array.isArray(deployment.alias) && deployment.alias.length ? deployment.alias[0] : deployment.url;
+    const publicUrl = "https://" + String(rawUrl).replace(/^https?:\/\//i, "");
+    const now = new Date().toISOString();
+    project.vercelDeploymentId = String(deployment.id);
+    project.publicUrl = publicUrl;
+    project.publishStatus = String(deployment.readyState || deployment.status || "QUEUED").toLowerCase();
+    project.publishedAt = now;
+    project.updatedAt = now;
+    project.contentReviewed = true;
+    lead.websiteUrl = publicUrl;
+    lead.websitePublishedAt = now;
+    lead.updatedAt = now;
+    if (lead.stage === "Pago") lead.stage = "Site entregue";
+    await persistStore();
+    await persistHubStateDb();
+    return res.status(201).json({ ok: true, projectId: project.id, deploymentId: project.vercelDeploymentId, publicUrl, publishStatus: project.publishStatus });
+  } catch (error) {
+    console.error("Falha na publicação Vercel:", error.message);
+    return res.status(502).json({ error: "Falha ao publicar o site. O projeto e o pagamento permanecem salvos." });
   }
 });
 

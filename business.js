@@ -58,7 +58,7 @@ function render(){
     const actions=element("td");const stack=element("div","row-actions");
     stack.append(button("Selecionar demonstração","",()=>selectDemo(l.id)));
     stack.append(button("Editar","",()=>editLead(l.id)));
-    if(["Pago","Site entregue"].includes(l.stage)){const project=hubProjects.find(item=>item.leadId===l.id);stack.append(button(project?"Abrir projeto":"Criar projeto","",()=>{if(project)window.location.href="./index.html?project="+encodeURIComponent(project.id);else void createProjectFromLead(l.id)}));}
+    if(["Pago","Site entregue"].includes(l.stage)){const project=hubProjects.find(item=>item.leadId===l.id);stack.append(button(project?"Abrir projeto":"Criar projeto","",()=>{if(project)window.location.href="./index.html?project="+encodeURIComponent(project.id);else void createProjectFromLead(l.id)}));if(project){stack.append(button(project.publicUrl?"Abrir site publicado":"Publicar site","",()=>{if(project.publicUrl){window.open(project.publicUrl,"_blank","noopener,noreferrer");return}void publishClientSite(project.id,l.id)}));}}
     if(["Proposta enviada","Aguardando pagamento"].includes(l.stage)&&l.packageKey){stack.append(button("Gerar link de pagamento","",()=>createPaymentLink(l.id)));}
     stack.append(button("Abrir Maps","",()=>openMaps(l)));
     if(l.consent&&l.consentEvidence&&!l.doNotContact&&l.stage!=="Sem interesse"&&normalizedPhone(l.whatsapp)){
@@ -128,6 +128,19 @@ async function createProjectFromLead(id){
     toast("Projeto criado no núcleo. Abrindo workspace…");
     window.location.href="./index.html?project="+encodeURIComponent(project.id);
   }catch(e){hubProjects=hubProjects.filter(item=>item.id!==project.id);try{localStorage.setItem(PROJECT_STORE,JSON.stringify(hubProjects))}catch{}toast("Falha ao criar projeto no núcleo: "+e.message)}
+}
+
+
+async function publishClientSite(projectId,leadId){
+  const project=hubProjects.find(item=>item.id===projectId);const lead=leads.find(item=>item.id===leadId);if(!project||!lead)return;
+  if(lead.paymentStatus!=="approved"||!lead.paymentId){toast("A publicação só é liberada após confirmação real do pagamento.");return}
+  if(!confirm("Publicar o site de "+lead.name+" na hospedagem Vercel? Confirme somente se revisou os arquivos no Studio e tem autorização para publicar o conteúdo. A publicação ficará pública."))return;
+  try{
+    const result=await agentRequest("/api/projects/"+encodeURIComponent(projectId)+"/publish",{method:"POST",body:JSON.stringify({approved:true})});
+    project.publicUrl=result.publicUrl;project.vercelDeploymentId=result.deploymentId;project.publishStatus=result.publishStatus;project.publishedAt=new Date().toISOString();lead.websiteUrl=result.publicUrl;lead.stage="Site entregue";lead.updatedAt=new Date().toISOString();
+    persist();render();window.open(result.publicUrl,"_blank","noopener,noreferrer");
+    toast("Publicação iniciada. Status do provedor: "+result.publishStatus+".");
+  }catch(e){toast("Não foi possível publicar: "+e.message)}
 }
 
 async function createPaymentLink(id){

@@ -30,3 +30,8 @@ Após uma confirmação de pagamento aprovada e validada, o backend cria automat
 
 
 O endpoint `GET /api/status` informa `whatsappAuthPersistence` (`supabase-encrypted` ou `local-only`) e `paymentIntegrationConfigured` sem expor credenciais. Use esses indicadores para conferir se as variáveis de ambiente necessárias estão configuradas.
+
+
+## Publicação de sites de clientes
+
+Para ativar a publicação, configure `VERCEL_TOKEN` no backend e, se necessário, `VERCEL_TEAM_ID`. Após a confirmação real do pagamento, abra o CRM e use **Publicar site**; a ação exige confirmação explícita de que o conteúdo foi revisado e autorizado. O backend verifica o pagamento aprovado, valida os caminhos dos arquivos, limita o tamanho e envia o workspace para a API da Vercel. O domínio padrão `vercel.app` é usado; domínios próprios ainda precisam ser configurados no provedor. A publicação não funciona até as credenciais Vercel serem configuradas.
