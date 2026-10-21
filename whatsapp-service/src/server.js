@@ -197,7 +197,11 @@ async function startWhatsApp() {
           setTimeout(() => startWhatsApp().catch(error => console.error("Reconexão falhou:", error.message)), 3000);
         } else {
           qr = null;
-          console.warn("Sessão encerrada pelo WhatsApp. É necessário vincular novamente pelo QR Code.");
+          sock = null;
+          void fsp.rm(AUTH_DIR, { recursive: true, force: true })
+            .then(() => fsp.mkdir(AUTH_DIR, { recursive: true }))
+            .catch(error => console.error("Não foi possível limpar a sessão encerrada:", error.message));
+          console.warn("Sessão encerrada pelo WhatsApp. Solicite um novo QR Code para vincular novamente.");
         }
       }
     });
