@@ -18,6 +18,12 @@ const server = http.createServer(async (req,res) => {
   try {
     const url = new URL(req.url || "/", "http://localhost");
     const requested = decodeURIComponent(url.pathname === "/" ? "/index.html" : url.pathname);
+    const segments = requested.split("/").filter(Boolean);
+    if (segments[0] === "whatsapp-service" || segments.some(segment => segment.startsWith(".") || segment === "node_modules" || segment === "data" || segment === "auth")) {
+      res.writeHead(403, { "Content-Type":"text/plain; charset=utf-8" });
+      res.end("Forbidden");
+      return;
+    }
     const target = path.resolve(root, "." + requested);
     if (target !== root && !target.startsWith(root + path.sep)) {
       res.writeHead(403);res.end("Forbidden");return;
