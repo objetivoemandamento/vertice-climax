@@ -1,0 +1,8 @@
+# Local dependencies and credentials
+node_modules/
+whatsapp-service/node_modules/
+whatsapp-service/.env
+whatsapp-service/data/
+*.log
+.DS_Store
+Thumbs.db
