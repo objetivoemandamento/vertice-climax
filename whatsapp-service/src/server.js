@@ -85,7 +85,7 @@ function safeString(value, max = 10000) {
 
 async function hubDbRpc(action, payload = {}) {
   if (!hubDbReady) throw new Error("Banco central não configurado");
-  const endpoint = SUPABASE_URL.replace(/\\/+$/, "") + "/functions/v1/vertice-climax-state";
+  const endpoint = SUPABASE_URL.replace(/\/+$/, "") + "/functions/v1/vertice-climax-state";
   const response = await fetch(endpoint, {
     method: "POST",
     headers: {
