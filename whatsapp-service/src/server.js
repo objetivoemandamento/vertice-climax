@@ -385,15 +385,21 @@ app.put("/api/hub/state", async (req, res) => {
     if (input.leads.some(item => !item || typeof item.id !== "string" || typeof item.name !== "string" || item.name.length > 120)) {
       return res.status(400).json({ error: "Cada lead precisa de id e nome válidos" });
     }
-    hubState.leads = input.leads.map(item => ({
-      ...item,
-      name: safeString(item.name, 120),
-      notes: safeString(item.notes, 3000),
-      consentEvidence: safeString(item.consentEvidence, 500),
-      consent: item.consent === true && Boolean(item.consentEvidence),
-      doNotContact: item.doNotContact === true || item.stage === "Sem interesse",
-      updatedAt: safeString(item.updatedAt, 60) || new Date().toISOString()
-    })).slice(-5000);
+    const previousLeads = new Map(hubState.leads.map(item => [item.id, item]));
+    hubState.leads = input.leads.map(item => {
+      const previous = previousLeads.get(item.id);
+      const optedOut = Boolean(previous?.doNotContact || previous?.stage === "Sem interesse" || item.doNotContact === true || item.stage === "Sem interesse");
+      return {
+        ...item,
+        name: safeString(item.name, 120),
+        notes: safeString(item.notes, 3000),
+        consentEvidence: safeString(item.consentEvidence, 500),
+        consent: !optedOut && item.consent === true && Boolean(item.consentEvidence),
+        doNotContact: optedOut,
+        stage: optedOut ? "Sem interesse" : safeString(item.stage, 80),
+        updatedAt: safeString(item.updatedAt, 60) || new Date().toISOString()
+      };
+    }).slice(-5000);
   }
   if (input.projects !== undefined) {
     hubState.projects = input.projects.filter(item => item && typeof item.id === "string").slice(-1000);
