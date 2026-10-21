@@ -148,9 +148,11 @@ async function publishClientSite(projectId,leadId){
   if(!confirm("Publicar o site de "+lead.name+" na hospedagem Vercel? Confirme somente se revisou os arquivos no Studio e tem autorização para publicar o conteúdo. A publicação ficará pública."))return;
   try{
     const result=await agentRequest("/api/projects/"+encodeURIComponent(projectId)+"/publish",{method:"POST",body:JSON.stringify({approved:true})});
-    project.publicUrl=result.publicUrl;project.vercelDeploymentId=result.deploymentId;project.publishStatus=result.publishStatus;project.publishedAt=new Date().toISOString();lead.websiteUrl=result.publicUrl;lead.stage="Site entregue";lead.updatedAt=new Date().toISOString();
-    persist();render();window.open(result.publicUrl,"_blank","noopener,noreferrer");
-    toast("Publicação iniciada. Status do provedor: "+result.publishStatus+".");
+    project.publicUrl=result.publicUrl;project.vercelDeploymentId=result.deploymentId;project.publishStatus=result.publishStatus;lead.websiteUrl=result.publicUrl;lead.updatedAt=new Date().toISOString();
+    if(result.publishStatus==="ready"){project.publishedAt=new Date().toISOString();lead.websitePublishedAt=project.publishedAt;lead.stage="Site entregue";}
+    persist();render();
+    if(result.publishStatus==="ready"){window.open(result.publicUrl,"_blank","noopener,noreferrer");toast("Site publicado e confirmado pela Vercel.");}
+    else toast("Publicação iniciada. Status do provedor: "+result.publishStatus+". Use Verificar publicação em alguns segundos.");
   }catch(e){toast("Não foi possível publicar: "+e.message)}
 }
 
