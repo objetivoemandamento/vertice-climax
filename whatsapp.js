@@ -120,7 +120,8 @@ async function select(id,name){
     if(!d.messages?.length)container.textContent="Nenhuma mensagem armazenada para esta conversa.";
   }catch(e){$("#messages").textContent=e.message}
 }
-function updateRegisterButton(){$("#register-contact").disabled=!active||!$("#auto-consent").checked||!$("#auto-consent-evidence").value.trim()}\n$("#auto-consent").onchange=updateRegisterButton;$("#auto-consent-evidence").oninput=updateRegisterButton;
+function updateRegisterButton(){$("#register-contact").disabled=!active||!$("#auto-consent").checked||!$("#auto-consent-evidence").value.trim()}
+$("#auto-consent").onchange=updateRegisterButton;$("#auto-consent-evidence").oninput=updateRegisterButton;
 $("#register-contact").onclick=async()=>{
   if(!active||!$("#auto-consent").checked||!$("#auto-consent-evidence").value.trim())return;
   if(!confirm("Confirma que este destinatário autorizou receber mensagens comerciais e que você possui registro dessa autorização? O agente não iniciará a conversa, apenas responderá a mensagens recebidas."))return;
