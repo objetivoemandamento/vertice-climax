@@ -52,7 +52,8 @@ function render(){
     stack.append(button("Editar","",()=>editLead(l.id)));
     stack.append(button("Abrir Maps","",()=>openMaps(l)));
     if(l.consent&&l.consentEvidence&&!l.doNotContact&&l.stage!=="Sem interesse"&&normalizedPhone(l.whatsapp)){
-      const a=element("a","button","Abrir WhatsApp");a.href="https://wa.me/"+normalizedPhone(l.whatsapp);a.target="_blank";a.rel="noopener noreferrer";a.title="Abre o contato; não envia mensagem automaticamente";stack.append(a);\n      if(normalizedPhone(l.whatsapp).length>=12&&normalizedPhone(l.whatsapp).length<=15)stack.append(button("Registrar no agente","",()=>registerLeadWithAgent(l.id)));
+      const a=element("a","button","Abrir WhatsApp");a.href="https://wa.me/"+normalizedPhone(l.whatsapp);a.target="_blank";a.rel="noopener noreferrer";a.title="Abre o contato; não envia mensagem automaticamente";stack.append(a);;
+      if(normalizedPhone(l.whatsapp).length>=12&&normalizedPhone(l.whatsapp).length<=15)stack.append(button("Registrar no agente","",()=>registerLeadWithAgent(l.id)));
     }
     stack.append(button("Excluir","",()=>deleteLead(l.id)));
     actions.append(stack);tr.append(actions);body.append(tr);
@@ -79,17 +80,18 @@ function editLead(id){
 function saveLead(e){
   e.preventDefault();
   const id=value("lead-id"),existing=leads.find(x=>x.id===id),stage=value("lead-stage"),consent=$("#lead-consent").checked,consentEvidence=value("lead-consent-evidence");
-  if(stage==="Contato autorizado"&&!consent){toast("Marque autorização somente se ela realmente existir.");return}\n  if(consent&&!consentEvidence){toast("Registre a data ou referência da autorização antes de marcar o consentimento.");return}
+  if(stage==="Contato autorizado"&&!consent){toast("Marque autorização somente se ela realmente existir.");return}}
+  if(consent&&!consentEvidence){toast("Registre a data ou referência da autorização antes de marcar o consentimento.");return}
   if(stage==="Sem interesse"&&consent){toast("Contato marcado sem interesse não pode permanecer autorizado.");return}
   if(existing?.doNotContact&&stage!=="Sem interesse"){toast("Este registro está bloqueado por recusa. Não reative automaticamente o contato.");return}
   const data={
     id:id||uid(),name:value("lead-name"),segment:value("lead-segment"),location:value("lead-location"),
     phone:value("lead-phone"),whatsapp:value("lead-whatsapp"),website:value("lead-website"),social:value("lead-social"),
-    source:value("lead-source"),stage,packageKey:value("lead-package"),notes:value("lead-notes"),
+    source:value("lead-source"),stage,packageKey:value("lead-package"),notes:value("lead-notes"),consentEvidence,
     consent:stage==="Sem interesse"?false:consent,doNotContact:stage==="Sem interesse"||Boolean(existing?.doNotContact),
     createdAt:existing?.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString()
   };
-  if(data.website&&!/^https?:\/\//i.test(data.website)){toast("O site deve começar com http:// ou https://.");return}
+  const websiteLower=String(data.website||"").toLowerCase();if(data.website&&!websiteLower.startsWith("http://")&&!websiteLower.startsWith("https://")){toast("O site deve começar com http:// ou https://.");return}
   if(existing)leads=leads.map(l=>l.id===id?data:l);else leads.unshift(data);
   if(!persist())return;
   resetForm();render();toast(existing?"Empresa atualizada":"Empresa cadastrada");
@@ -97,7 +99,6 @@ function saveLead(e){
 function deleteLead(id){
   const l=leads.find(x=>x.id===id);if(!l||!confirm("Excluir "+l.name+" deste navegador?"))return;
   leads=leads.filter(x=>x.id!==id);if(activeDemoId===id)activeDemoId=null;persist();render();updateDemo();toast("Registro excluído");
-}
 }
 function selectDemo(id){activeDemoId=id;updateDemo()}
 function updateDemo(){
