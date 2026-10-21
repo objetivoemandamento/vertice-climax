@@ -161,8 +161,9 @@ async function agentRequest(path,options={}){
   return data;
 }
 function queueHubSync(){
-  if(!sessionStorage.getItem(AGENT_TOKEN_KEY)||syncBusy)return;
+  if(!sessionStorage.getItem(AGENT_TOKEN_KEY))return;
   if(syncTimer)clearTimeout(syncTimer);
+  if(syncBusy){syncTimer=setTimeout(()=>queueHubSync(),1500);return}
   syncTimer=setTimeout(()=>{void syncHubState(true)},1200);
 }
 function mergeById(localItems,remoteItems){
