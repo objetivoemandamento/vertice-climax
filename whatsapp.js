@@ -120,13 +120,13 @@ async function select(id,name){
     if(!d.messages?.length)container.textContent="Nenhuma mensagem armazenada para esta conversa.";
   }catch(e){$("#messages").textContent=e.message}
 }
-$("#auto-consent").onchange=()=>{$("#register-contact").disabled=!active||!$("#auto-consent").checked};
+function updateRegisterButton(){$("#register-contact").disabled=!active||!$("#auto-consent").checked||!$("#auto-consent-evidence").value.trim()}\n$("#auto-consent").onchange=updateRegisterButton;$("#auto-consent-evidence").oninput=updateRegisterButton;
 $("#register-contact").onclick=async()=>{
-  if(!active||!$("#auto-consent").checked)return;
+  if(!active||!$("#auto-consent").checked||!$("#auto-consent-evidence").value.trim())return;
   if(!confirm("Confirma que este destinatário autorizou receber mensagens comerciais e que você possui registro dessa autorização? O agente não iniciará a conversa, apenas responderá a mensagens recebidas."))return;
   try{
-    await api("/api/automation/contacts",{method:"POST",body:JSON.stringify({chatId:active,name:$("#chat-title").textContent,consent:true})});
-    $("#auto-consent").checked=false;$("#register-contact").disabled=true;
+    await api("/api/automation/contacts",{method:"POST",body:JSON.stringify({chatId:active,name:$("#chat-title").textContent,consent:true,consentEvidence:$("#auto-consent-evidence").value.trim()})});
+    $("#auto-consent").checked=false;$("#auto-consent-evidence").value="";updateRegisterButton();
     status("Contato autorizado registrado para o agente local.");await loadAutomation();
   }catch(e){status(e.message)}
 };
