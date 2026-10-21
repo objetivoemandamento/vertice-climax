@@ -2,6 +2,14 @@
 
 Ambiente de programação e automação comercial em português brasileiro. O frontend inclui editor de arquivos, pré-visualização HTML, exportação ZIP, painel comercial local (`business.html`) e painel para conexão do WhatsApp Web.
 
+## Executar localmente no Windows
+
+Para manter a sessão do WhatsApp e o cache em disco local sem contratar hospedagem, instale Node.js 20+ e execute `run-local.bat). Ele abre o servidor estático local e o conector, gera um token forte no arquivo ignorado pelo Git `whatsapp-service/.env` e abre o painel comercial.
+
+No painel WhatsApp, use `http://127.0.0.1:8787`; o token está na linha `VERTICE_SERVICE_TOKEN` de `whatsapp-service/.env`. Escaneie o QR Code com o celular. Mantenha as duas janelas abertas enquanto utilizar a automação.
+
+A sessão e o cache serão salvos em `whatsapp-service/data`. Não compartilhe essa pasta nem o arquivo `.env`. A primeira instalação exige conexão à internet para baixar dependências do Node.js. A execução local evita a limitação de disco efêmero do plano gratuito do Render, mas o computador precisa permanecer ligado e conectado.
+
 ## WhatsApp Web
 
 O conector usa Baileys, uma biblioteca comunitária não oficial. A autenticação é feita com QR Code do WhatsApp Web; não exige a API oficial do WhatsApp, mas depende da compatibilidade contínua com o protocolo e pode sofrer desconexões ou restrições.
