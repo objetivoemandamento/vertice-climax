@@ -53,6 +53,7 @@ function render(){
     stack.append(button("Selecionar demonstração","",()=>selectDemo(l.id)));
     stack.append(button("Editar","",()=>editLead(l.id)));
     if(["Pago","Site entregue"].includes(l.stage)){const project=hubProjects.find(item=>item.leadId===l.id);stack.append(button(project?"Abrir projeto":"Criar projeto","",()=>{if(project)window.location.href="./index.html?project="+encodeURIComponent(project.id);else void createProjectFromLead(l.id)}));}
+    if(["Proposta enviada","Aguardando pagamento"].includes(l.stage)&&l.packageKey){stack.append(button("Gerar link de pagamento","",()=>createPaymentLink(l.id)));}
     stack.append(button("Abrir Maps","",()=>openMaps(l)));
     if(l.consent&&l.consentEvidence&&!l.doNotContact&&l.stage!=="Sem interesse"&&normalizedPhone(l.whatsapp)){
       const a=element("a","button","Abrir WhatsApp");a.href="https://wa.me/"+normalizedPhone(l.whatsapp);a.target="_blank";a.rel="noopener noreferrer";a.title="Abre o contato; não envia mensagem automaticamente";stack.append(a);
@@ -119,6 +120,22 @@ async function createProjectFromLead(id){
     window.location.href="./index.html?project="+encodeURIComponent(project.id);
   }catch(e){hubProjects=hubProjects.filter(item=>item.id!==project.id);try{localStorage.setItem(PROJECT_STORE,JSON.stringify(hubProjects))}catch{}toast("Falha ao criar projeto no núcleo: "+e.message)}
 }
+
+async function createPaymentLink(id){
+  const lead=leads.find(item=>item.id===id);if(!lead)return;
+  if(!["Proposta enviada","Aguardando pagamento"].includes(lead.stage)){toast("Envie e registre a proposta antes de cobrar.");return}
+  if(!lead.packageKey){toast("Selecione o pacote antes de gerar o link.");return}
+  if(!sessionStorage.getItem(AGENT_TOKEN_KEY)){toast("Conecte o núcleo central para gerar o pagamento.");return}
+  if(!confirm("Gerar link de pagamento de "+packageLabel(lead.packageKey)+" para "+lead.name+"? O estágio mudará para Aguardando pagamento."))return;
+  try{
+    const result=await agentRequest("/api/payments/preference",{method:"POST",body:JSON.stringify({leadId:lead.id})});
+    if(!result.initPoint)throw Error("O provedor não retornou um link de pagamento.");
+    lead.stage="Aguardando pagamento";lead.paymentProvider="mercadopago";lead.paymentPreferenceId=String(result.preferenceId||"");lead.paymentStatus="pending";lead.updatedAt=new Date().toISOString();
+    persist();render();window.open(result.initPoint,"_blank","noopener,noreferrer");
+    toast("Link de pagamento criado. O CRM será atualizado quando o webhook confirmar o recebimento.");
+  }catch(e){toast("Não foi possível gerar o pagamento: "+e.message)}
+}
+
 function selectDemo(id){activeDemoId=id;updateDemo()}
 function updateDemo(){
   const l=leads.find(x=>x.id===activeDemoId);

@@ -9,6 +9,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import crypto from "node:crypto";
 import { classifyIncomingMessage } from "./local-agent.js";
+import { verifyMercadoPagoSignature, getPackagePrice, isMatchingApprovedPayment } from "./mercadopago.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -24,6 +25,10 @@ const origins = (process.env.FRONTEND_ORIGIN || "").split(",").map(s => s.trim()
 const SUPABASE_URL = (process.env.SUPABASE_URL || "").replace(/\/$/, "");
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || "";
 const HUB_DB_SECRET = process.env.HUB_DB_SECRET || "";
+const MP_ACCESS_TOKEN = process.env.MERCADOPAGO_ACCESS_TOKEN || "";
+const MP_WEBHOOK_SECRET = process.env.MERCADOPAGO_WEBHOOK_SECRET || "";
+const PUBLIC_SERVICE_URL = (process.env.PUBLIC_SERVICE_URL || "https://vertice-climax-whatsapp.onrender.com").replace(/\/+$/, "");
+const FRONTEND_PUBLIC_URL = (process.env.FRONTEND_ORIGIN || "https://vertice-climax.onrender.com").split(",")[0].trim().replace(/\/+$/, "");
 const hubDbReady = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY && HUB_DB_SECRET);
 
 
@@ -427,7 +432,128 @@ app.get("/health", (_req, res) => res.json({
   hubWorkspaces: Object.keys(hubState.workspaces).length,
   hubUpdatedAt: hubState.updatedAt
 }));
+
+app.post("/webhooks/mercadopago", async (req, res) => {
+  if (!MP_ACCESS_TOKEN || !MP_WEBHOOK_SECRET) {
+    return res.status(503).json({ received: false, error: "Webhook de pagamento não configurado" });
+  }
+  const dataId = String(req.query["data.id"] || req.query.id || req.body?.data?.id || "");
+  const requestId = String(req.headers["x-request-id"] || "");
+  const signature = String(req.headers["x-signature"] || "");
+  if (!dataId || !requestId || !verifyMercadoPagoSignature({ signature, requestId, dataId, secret: MP_WEBHOOK_SECRET })) {
+    return res.status(401).json({ received: false, error: "Assinatura do webhook inválida" });
+  }
+  try {
+    const response = await fetch("https://api.mercadopago.com/v1/payments/" + encodeURIComponent(dataId), {
+      headers: { Authorization: "Bearer " + MP_ACCESS_TOKEN, Accept: "application/json" }
+    });
+    if (!response.ok) {
+      console.error("Mercado Pago não confirmou pagamento:", response.status);
+      return res.status(502).json({ received: false, error: "Não foi possível consultar o pagamento" });
+    }
+    const payment = await response.json();
+    if (String(payment.id) !== dataId) return res.status(401).json({ received: false, error: "Identificador de pagamento divergente" });
+    const leadId = String(payment.external_reference || "");
+    const lead = hubState.leads.find(item => item.id === leadId);
+    if (!lead) return res.status(200).json({ received: true, applied: false, reason: "lead_not_found" });
+    if (lead.paymentId && String(lead.paymentId) === String(payment.id) && ["Pago", "Site entregue"].includes(lead.stage)) {
+      return res.status(200).json({ received: true, applied: true, duplicate: true });
+    }
+    if (["Pago", "Site entregue"].includes(lead.stage)) {
+      return res.status(200).json({ received: true, applied: false, reason: "lead_already_paid" });
+    }
+    if (payment.status !== "approved") {
+      lead.paymentStatus = String(payment.status || "pending").slice(0, 40);
+      lead.updatedAt = new Date().toISOString();
+      await persistStore();
+      await persistHubStateDb();
+      return res.status(200).json({ received: true, applied: false, reason: "payment_not_approved" });
+    }
+    if (!isMatchingApprovedPayment(payment, lead)) {
+      console.warn("Pagamento aprovado não conciliado automaticamente; verificar referência, pacote, valor e moeda.", dataId);
+      lead.paymentReviewRequired = true;
+      lead.paymentReviewReason = "Divergência de referência, pacote, valor ou moeda";
+      lead.updatedAt = new Date().toISOString();
+      await persistStore();
+      await persistHubStateDb();
+      return res.status(200).json({ received: true, applied: false, reason: "payment_mismatch_requires_review" });
+    }
+    const now = new Date().toISOString();
+    lead.stage = "Pago";
+    lead.paymentStatus = "approved";
+    lead.paymentProvider = "mercadopago";
+    lead.paymentId = String(payment.id);
+    lead.paymentAmount = Number(payment.transaction_amount);
+    lead.paymentCurrency = payment.currency_id;
+    lead.paymentApprovedAt = payment.date_approved || now;
+    lead.paymentReviewRequired = false;
+    lead.paymentReviewReason = null;
+    lead.updatedAt = now;
+    await persistStore();
+    await persistHubStateDb();
+    return res.status(200).json({ received: true, applied: true, leadId: lead.id, stage: lead.stage });
+  } catch (error) {
+    console.error("Falha ao processar webhook de pagamento:", error.message);
+    return res.status(502).json({ received: false, error: "Falha ao processar o evento de pagamento" });
+  }
+});
+
 app.use("/api", requireAuth);
+
+app.post("/api/payments/preference", async (req, res) => {
+  if (!MP_ACCESS_TOKEN || !MP_WEBHOOK_SECRET) {
+    return res.status(503).json({ error: "Configure MERCADOPAGO_ACCESS_TOKEN e MERCADOPAGO_WEBHOOK_SECRET no serviço para ativar pagamentos." });
+  }
+  const leadId = typeof req.body?.leadId === "string" ? req.body.leadId.trim() : "";
+  const lead = hubState.leads.find(item => item.id === leadId);
+  if (!lead) return res.status(404).json({ error: "Empresa não encontrada no núcleo central." });
+  if (!["Proposta enviada", "Aguardando pagamento"].includes(lead.stage)) {
+    return res.status(409).json({ error: "Registre a proposta enviada antes de gerar um link de pagamento." });
+  }
+  const price = getPackagePrice(lead.packageKey);
+  if (price === null) return res.status(400).json({ error: "Selecione um pacote válido antes de gerar o pagamento." });
+  if (["Pago", "Site entregue"].includes(lead.stage)) return res.status(409).json({ error: "Este projeto já está marcado como pago." });
+  try {
+    const preferenceResponse = await fetch("https://api.mercadopago.com/checkout/preferences", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + MP_ACCESS_TOKEN,
+        "Content-Type": "application/json",
+        "X-Idempotency-Key": crypto.randomUUID()
+      },
+      body: JSON.stringify({
+        items: [{ id: String(lead.packageKey), title: "Site para " + safeString(lead.name, 100) + " — pacote " + safeString(lead.packageKey, 40), quantity: 1, currency_id: "BRL", unit_price: price }],
+        external_reference: lead.id,
+        notification_url: PUBLIC_SERVICE_URL + "/webhooks/mercadopago",
+        back_urls: {
+          success: FRONTEND_PUBLIC_URL + "/business.html?payment=success",
+          pending: FRONTEND_PUBLIC_URL + "/business.html?payment=pending",
+          failure: FRONTEND_PUBLIC_URL + "/business.html?payment=failure"
+        },
+        auto_return: "approved",
+        metadata: { lead_id: lead.id, package_key: lead.packageKey }
+      })
+    });
+    const preference = await preferenceResponse.json().catch(() => ({}));
+    if (!preferenceResponse.ok || !preference.id || !preference.init_point) {
+      console.error("Mercado Pago recusou a criação de preferência:", preferenceResponse.status);
+      return res.status(502).json({ error: "Não foi possível gerar o link de pagamento. Confira a configuração do provedor." });
+    }
+    lead.stage = "Aguardando pagamento";
+    lead.paymentProvider = "mercadopago";
+    lead.paymentPreferenceId = String(preference.id);
+    lead.paymentStatus = "pending";
+    lead.paymentReviewRequired = false;
+    lead.updatedAt = new Date().toISOString();
+    await persistStore();
+    await persistHubStateDb();
+    return res.status(201).json({ ok: true, preferenceId: preference.id, initPoint: preference.init_point, sandboxInitPoint: preference.sandbox_init_point || null, amount: price, currency: "BRL" });
+  } catch (error) {
+    console.error("Falha ao criar link de pagamento:", error.message);
+    return res.status(502).json({ error: "Não foi possível concluir a solicitação de pagamento." });
+  }
+});
+
 app.get("/api/hub/state", (_req, res) => {
   return res.json({
     version: hubState.version,
