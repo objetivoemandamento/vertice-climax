@@ -83,16 +83,17 @@ function safeString(value, max = 10000) {
   return typeof value === "string" ? value.slice(0, max) : "";
 }
 
-async function hubDbRpc(name, payload) {
+async function hubDbRpc(action, payload = {}) {
   if (!hubDbReady) throw new Error("Banco central não configurado");
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${name}`, {
+  const endpoint = SUPABASE_URL.replace(/\\/+$/, "") + "/functions/v1/vertice-climax-state";
+  const response = await fetch(endpoint, {
     method: "POST",
     headers: {
       "apikey": SUPABASE_ANON_KEY,
       "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({ ...payload, p_secret: HUB_DB_SECRET })
+    body: JSON.stringify({ ...payload, action, secret: HUB_DB_SECRET })
   });
   if (!response.ok) {
     const detail = await response.text().catch(() => "");
@@ -179,13 +180,13 @@ async function persistWhatsAppAuthToDb() {
   }
   if (!Object.keys(files).length) return;
   const encrypted = encryptAuthFiles(files, HUB_DB_SECRET);
-  await hubDbRpc("vertice_climax_put_whatsapp_auth", { p_payload: encrypted });
+  await hubDbRpc("put_whatsapp_auth", { payload: encrypted });
 }
 async function loadWhatsAppAuthFromDb() {
   if (!hubDbReady) return;
   let encrypted;
   try {
-    encrypted = await hubDbRpc("vertice_climax_get_whatsapp_auth", {});
+    encrypted = await hubDbRpc("get_whatsapp_auth", {});
   } catch (error) {
     console.warn("Persistência remota da sessão WhatsApp indisponível; mantendo o armazenamento local:", error.message);
     return;
@@ -232,14 +233,14 @@ function hubStateSnapshot() {
 }
 async function persistHubStateDb() {
   const snapshot = hubStateSnapshot();
-  await hubDbRpc("vertice_climax_put_state", { p_state: snapshot });
+  await hubDbRpc("put_state", { state: snapshot });
 }
 async function loadHubStateDb() {
   if (!hubDbReady) {
     console.warn("Banco central não configurado; dados centrais permanecem apenas no armazenamento local.");
     return;
   }
-  const remote = await hubDbRpc("vertice_climax_get_state", {});
+  const remote = await hubDbRpc("get_state", {});
   const remoteHasData = Boolean(remote && (remote.updatedAt || remote.leads?.length || remote.projects?.length || Object.keys(remote.workspaces || {}).length));
   const localHasData = Boolean(hubState.updatedAt || hubState.leads.length || hubState.projects.length || Object.keys(hubState.workspaces).length);
   if (!remoteHasData && localHasData) {
