@@ -366,6 +366,9 @@ app.put("/api/hub/state", async (req, res) => {
   if (input.projects !== undefined) {
     hubState.projects = input.projects.filter(item => item && typeof item.id === "string").slice(-1000);
   }
+  if (input.workspaceUpdatedAt !== undefined && (!input.workspaceUpdatedAt || typeof input.workspaceUpdatedAt !== "object" || Array.isArray(input.workspaceUpdatedAt))) {
+    return res.status(400).json({ error: "workspaceUpdatedAt deve ser um objeto" });
+  }
   if (input.workspaces !== undefined) {
     const entries = Object.entries(input.workspaces).slice(-100);
     let totalBytes = 0;
@@ -382,6 +385,9 @@ app.put("/api/hub/state", async (req, res) => {
       safeWorkspaces[key] = safeFiles;
     }
     hubState.workspaces = safeWorkspaces;
+  }
+  if (input.workspaceUpdatedAt !== undefined) {
+    hubState.workspaceUpdatedAt = Object.fromEntries(Object.entries(input.workspaceUpdatedAt).filter(([key, value]) => typeof key === "string" && key.length <= 120 && typeof value === "string" && value.length <= 60).slice(-100));
   }
   hubState.updatedAt = new Date().toISOString();
   try {
