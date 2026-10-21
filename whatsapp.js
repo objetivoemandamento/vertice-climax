@@ -107,7 +107,7 @@ async function select(id,name){
   $("#message").disabled=false;
   $("#approve").disabled=false;
   $("#send").disabled=!$("#approve").checked;
-  $("#register-contact").disabled=!active||!$("#auto-consent").checked;
+  $("#register-contact").disabled=!active||!$("#auto-consent").checked||!$("#auto-consent-evidence").value.trim();
   try{
     const d=await api("/api/messages?chatId="+encodeURIComponent(id));
     const container=$("#messages");
