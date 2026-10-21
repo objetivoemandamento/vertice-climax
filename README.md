@@ -11,10 +11,10 @@ O serviço autenticado expõe `GET /api/hub/state` e `PUT /api/hub/state`, compa
 1. Cadastre a empresa no Painel Comercial e mantenha a evidência de autorização separada do estado da negociação.
 2. Valide a URL e o token do núcleo e use **Sincronizar sistema inteiro** para enviar/conciliar os leads.
 3. Conecte o WhatsApp por QR Code; o agente fica desligado até ser habilitado e só responde a contatos individuais registrados com autorização.
-4. Marque **Pago** somente após conferir o recebimento real. O CRM então permite criar um workspace do cliente no Studio, vinculado ao lead.
+4. Com o webhook do Mercado Pago configurado, o sistema confirma o pagamento por consulta à API e cria automaticamente o projeto e um rascunho de workspace no Studio. A publicação pública continua bloqueada até revisão do conteúdo e configuração do provedor de hospedagem.
 5. Edite os arquivos e sincronize o workspace com o núcleo. A prévia e o ZIP são locais; publicar um site em produção continua sendo uma etapa separada.
 
-A sincronização de dados e workspaces está implementada, mas a confirmação de pagamento por webhook não está configurada: sem credenciais de um provedor e um endpoint de webhook, o estado **Pago** continua sendo uma confirmação manual do operador. Também não há ainda publicação automática de sites ou hospedagem de cada cliente. O plano gratuito do Render pode perder arquivos de sessão ao reiniciar; para persistência do WhatsApp, use o inicializador local com o computador ligado ou configure armazenamento persistente de produção.
+A sincronização de dados e workspaces está implementada, mas a confirmação de pagamento por webhook não está configurada: sem credenciais de um provedor e um endpoint de webhook, o estado **Pago** continua sendo uma confirmação manual do operador. O webhook e a criação automática do workspace estão implementados, mas a publicação pública automática de sites e a hospedagem de cada cliente ainda não estão implementadas. O plano gratuito do Render pode perder arquivos de sessão ao reiniciar; para persistência do WhatsApp, use o inicializador local com o computador ligado ou configure armazenamento persistente de produção.
 
 ## Executar localmente no Windows
 

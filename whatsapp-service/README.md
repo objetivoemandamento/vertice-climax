@@ -24,3 +24,6 @@ O fluxo de pagamentos está implementado, mas permanece desativado até configur
 No CRM, registre a etapa **Proposta enviada**, escolha um pacote e use **Gerar link de pagamento**. O backend cria uma preferência no Checkout Pro. O webhook valida a assinatura, consulta o pagamento diretamente à API do Mercado Pago e só marca **Pago** quando a referência do lead, o pacote, a moeda BRL e o valor esperado coincidem. Eventos repetidos são idempotentes; divergências ficam para revisão e não liberam o projeto. O retorno do navegador à página de sucesso não confirma pagamento por si só.
 
 Preços configurados atualmente: Básico (chave `Basico`) R$ 300; Médio (`Medio`) R$ 700; Avançado (`Avancado`) R$ 2.000. Altere a tabela de pacotes no CRM e no backend em conjunto se os preços mudarem.
+
+
+Após uma confirmação de pagamento aprovada e validada, o backend cria automaticamente o projeto e um rascunho inicial de workspace vinculado ao lead. O rascunho é salvo no núcleo persistente e começa com `noindex,nofollow`; não é uma publicação pública. O cliente/proprietário ainda precisa revisar os textos, completar os dados reais e integrar um provedor de hospedagem antes de divulgar o site.
