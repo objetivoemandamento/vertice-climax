@@ -52,7 +52,7 @@ function render(){
     stack.append(button("Editar","",()=>editLead(l.id)));
     stack.append(button("Abrir Maps","",()=>openMaps(l)));
     if(l.consent&&l.consentEvidence&&!l.doNotContact&&l.stage!=="Sem interesse"&&normalizedPhone(l.whatsapp)){
-      const a=element("a","button","Abrir WhatsApp");a.href="https://wa.me/"+normalizedPhone(l.whatsapp);a.target="_blank";a.rel="noopener noreferrer";a.title="Abre o contato; não envia mensagem automaticamente";stack.append(a);;
+      const a=element("a","button","Abrir WhatsApp");a.href="https://wa.me/"+normalizedPhone(l.whatsapp);a.target="_blank";a.rel="noopener noreferrer";a.title="Abre o contato; não envia mensagem automaticamente";stack.append(a);
       if(normalizedPhone(l.whatsapp).length>=12&&normalizedPhone(l.whatsapp).length<=15)stack.append(button("Registrar no agente","",()=>registerLeadWithAgent(l.id)));
     }
     stack.append(button("Excluir","",()=>deleteLead(l.id)));
@@ -80,7 +80,7 @@ function editLead(id){
 function saveLead(e){
   e.preventDefault();
   const id=value("lead-id"),existing=leads.find(x=>x.id===id),stage=value("lead-stage"),consent=$("#lead-consent").checked,consentEvidence=value("lead-consent-evidence");
-  if(stage==="Contato autorizado"&&!consent){toast("Marque autorização somente se ela realmente existir.");return}}
+  if(stage==="Contato autorizado"&&!consent){toast("Marque autorização somente se ela realmente existir.");return}
   if(consent&&!consentEvidence){toast("Registre a data ou referência da autorização antes de marcar o consentimento.");return}
   if(stage==="Sem interesse"&&consent){toast("Contato marcado sem interesse não pode permanecer autorizado.");return}
   if(existing?.doNotContact&&stage!=="Sem interesse"){toast("Este registro está bloqueado por recusa. Não reative automaticamente o contato.");return}
