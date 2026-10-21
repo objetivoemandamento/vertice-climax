@@ -123,7 +123,7 @@ async function importBackup(e){
     if(!persist())return;activeDemoId=null;resetForm();render();updateDemo();toast("Backup restaurado");
   }catch(err){toast("Falha ao restaurar: "+err.message)}finally{e.target.value=""}
 }
-function safeHttpUrl(value){const v=String(value||"").trim();return /^https?:\\/\\//i.test(v)?esc(v):""}
+function safeHttpUrl(value){const v=String(value||"").trim();const lower=v.toLowerCase();return lower.startsWith("https://")||lower.startsWith("http://")?esc(v):""}
 function demoHtml(l){
   const name=esc(l.name),segment=esc(l.segment||"Negócio local"),location=esc(l.location||"Localização a confirmar");
   const packageName=esc(packageLabel(l.packageKey)),website=safeHttpUrl(l.website),social=safeHttpUrl(l.social);
