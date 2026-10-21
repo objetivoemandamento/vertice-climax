@@ -31,6 +31,7 @@ async function syncWorkspaceWithHub(silent=false){
   try{
     if(status)status.textContent="Sincronizando arquivos com o núcleo…";
     const remote=await hubRequest("/api/hub/state");
+    if(PROJECT_ID){const project=(remote.projects||[]).find(item=>item.id===PROJECT_ID);if(project){document.title=project.name+" — Vértice Climax";const heading=document.querySelector(".hero h1");if(heading)heading.textContent="Projeto · "+project.name;const intro=document.querySelector(".hero p");if(intro)intro.textContent="Workspace vinculado ao CRM. Edite os arquivos, valide a prévia e sincronize as alterações com o núcleo Vértice."}}
     const remoteFiles=remote.workspaces?.[HUB_WORKSPACE_KEY];
     const localRev=Date.parse(localStorage.getItem(WORKSPACE_REV)||"1970-01-01T00:00:00Z")||0;
     const remoteRev=Date.parse(remote.workspaceUpdatedAt?.[HUB_WORKSPACE_KEY]||"1970-01-01T00:00:00Z")||0;
