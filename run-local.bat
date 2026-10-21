@@ -8,7 +8,7 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
-start "Vertice Climax - Web local" cmd /k "cd /d ""%~dp0"" && node serve-local.mjs"
+start "Vertice Climax - Web local" /D "%~dp0" cmd /k "node serve-local.mjs"
 start "Vertice Climax - WhatsApp" powershell.exe -NoExit -ExecutionPolicy Bypass -File "%~dp0whatsapp-service\setup-local.ps1"
 timeout /t 4 >nul
 start "" "http://127.0.0.1:8080/business.html"
