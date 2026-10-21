@@ -1,7 +1,4 @@
 {
-  "functions": {
-    "api/whatsapp.js": {
-      "runtime": "nodejs20.x"
-    }
-  }
+  "cleanUrls": true,
+  "trailingSlash": false
 }
