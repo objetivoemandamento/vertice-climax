@@ -2,15 +2,17 @@
 "use strict";
 const $=s=>document.querySelector(s);
 const STORE="vertice_climax_business_leads_v1";
+const PROJECT_STORE="vertice_climax_projects_v1";
 const AGENT_URL_KEY="vertice_wa_service_url";
 const AGENT_TOKEN_KEY="vertice_wa_service_token";
 const DEFAULT_AGENT_URL=(location.hostname==="localhost"||location.hostname==="127.0.0.1")?"http://127.0.0.1:8787":"https://vertice-climax-whatsapp.onrender.com";
 const STAGES=["Novo","Pesquisado","Contato autorizado","Em conversa","Interessado","Proposta enviada","Aguardando pagamento","Pago","Site entregue","Sem interesse"];
 const PACKAGES={Basico:{name:"Básico",price:300},Medio:{name:"Médio",price:700},Avancado:{name:"Avançado",price:2000}};
-let leads=load(),activeDemoId=null,syncTimer=null,syncBusy=false;
+let leads=load(),hubProjects=loadProjects(),activeDemoId=null,syncTimer=null,syncBusy=false;
 function uid(){return (crypto.randomUUID?crypto.randomUUID():Date.now().toString(36)+Math.random().toString(36).slice(2))}
 function load(){try{const x=JSON.parse(localStorage.getItem(STORE)||"[]");return Array.isArray(x)?x.filter(v=>v&&typeof v.id==="string"&&typeof v.name==="string"):[]}catch{return []}}
-function persist(){try{localStorage.setItem(STORE,JSON.stringify(leads));queueHubSync();return true}catch(e){toast("Não foi possível salvar. Exporte um backup e libere espaço no navegador.");return false}}
+function loadProjects(){try{const x=JSON.parse(localStorage.getItem(PROJECT_STORE)||"[]");return Array.isArray(x)?x.filter(v=>v&&typeof v.id==="string"):[]}catch{return []}}
+function persist(){try{localStorage.setItem(STORE,JSON.stringify(leads));localStorage.setItem(PROJECT_STORE,JSON.stringify(hubProjects));queueHubSync();return true}catch(e){toast("Não foi possível salvar. Exporte um backup e libere espaço no navegador.");return false}}
 function toast(s){const el=$("#toast");el.textContent=s;el.classList.add("show");window.setTimeout(()=>el.classList.remove("show"),3000)}
 function value(id){return $("#"+id).value.trim()}
 function packageLabel(key){return PACKAGES[key]?PACKAGES[key].name+" — "+money(PACKAGES[key].price):"Não definido"}
@@ -50,6 +52,7 @@ function render(){
     const actions=element("td");const stack=element("div","row-actions");
     stack.append(button("Selecionar demonstração","",()=>selectDemo(l.id)));
     stack.append(button("Editar","",()=>editLead(l.id)));
+    if(["Pago","Site entregue"].includes(l.stage))stack.append(button("Criar projeto","",()=>createProjectFromLead(l.id)));
     stack.append(button("Abrir Maps","",()=>openMaps(l)));
     if(l.consent&&l.consentEvidence&&!l.doNotContact&&l.stage!=="Sem interesse"&&normalizedPhone(l.whatsapp)){
       const a=element("a","button","Abrir WhatsApp");a.href="https://wa.me/"+normalizedPhone(l.whatsapp);a.target="_blank";a.rel="noopener noreferrer";a.title="Abre o contato; não envia mensagem automaticamente";stack.append(a);
@@ -99,6 +102,22 @@ function saveLead(e){
 function deleteLead(id){
   const l=leads.find(x=>x.id===id);if(!l||!confirm("Excluir "+l.name+" deste navegador?"))return;
   leads=leads.filter(x=>x.id!==id);if(activeDemoId===id)activeDemoId=null;persist();render();updateDemo();toast("Registro excluído");
+}
+async function createProjectFromLead(id){
+  const lead=leads.find(item=>item.id===id);if(!lead)return;
+  if(!["Pago","Site entregue"].includes(lead.stage)){toast("Só crie o projeto após confirmar o pagamento e registrar a etapa Pago.");return}
+  if(hubProjects.some(project=>project.leadId===lead.id)){toast("Este cliente já possui um projeto no núcleo.");return}
+  if(!sessionStorage.getItem(AGENT_TOKEN_KEY)){toast("Conecte o núcleo central antes de criar o projeto compartilhado.");return}
+  if(!confirm("Criar workspace de desenvolvimento para "+lead.name+"? O projeto será registrado como pago manualmente no CRM; isso não substitui uma confirmação automática do provedor de pagamento."))return;
+  const project={id:uid(),leadId:lead.id,name:lead.name,segment:lead.segment||"",packageKey:lead.packageKey||"",status:"workspace-created",paymentStatus:"manually-confirmed-by-operator",createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+  hubProjects.unshift(project);try{localStorage.setItem(PROJECT_STORE,JSON.stringify(hubProjects))}catch{}
+  try{
+    const remote=await agentRequest("/api/hub/state");
+    const payload={leads:mergeById(leads,remote.leads),projects:mergeById(hubProjects,remote.projects),workspaces:remote.workspaces||{},workspaceUpdatedAt:remote.workspaceUpdatedAt||{}};
+    await agentRequest("/api/hub/state",{method:"PUT",body:JSON.stringify(payload)});
+    toast("Projeto criado no núcleo. Abrindo workspace…");
+    window.open("./index.html?project="+encodeURIComponent(project.id),"_blank","noopener");
+  }catch(e){hubProjects=hubProjects.filter(item=>item.id!==project.id);try{localStorage.setItem(PROJECT_STORE,JSON.stringify(hubProjects))}catch{}toast("Falha ao criar projeto no núcleo: "+e.message)}
 }
 function selectDemo(id){activeDemoId=id;updateDemo()}
 function updateDemo(){
@@ -169,7 +188,8 @@ async function syncHubState(silent=false){
     const changed=JSON.stringify(mergedLeads)!==JSON.stringify(leads);
     leads=mergedLeads;
     try{localStorage.setItem(STORE,JSON.stringify(leads))}catch{}
-    const payload={leads,projects:Array.isArray(remote.projects)?remote.projects:[],workspaces:remote.workspaces&&typeof remote.workspaces==="object"?remote.workspaces:{}};
+    hubProjects=mergeById(hubProjects,remote.projects);try{localStorage.setItem(PROJECT_STORE,JSON.stringify(hubProjects))}catch{}
+    const payload={leads,projects:hubProjects,workspaces:remote.workspaces&&typeof remote.workspaces==="object"?remote.workspaces:{},workspaceUpdatedAt:remote.workspaceUpdatedAt&&typeof remote.workspaceUpdatedAt==="object"?remote.workspaceUpdatedAt:{}};
     const saved=await agentRequest("/api/hub/state",{method:"PUT",body:JSON.stringify(payload)});
     if(changed)render();
     if(status)status.textContent="Núcleo sincronizado · "+saved.counts.leads+" leads · "+saved.counts.projects+" projetos · "+saved.counts.workspaces+" workspaces · "+new Date(saved.updatedAt).toLocaleTimeString("pt-BR");
