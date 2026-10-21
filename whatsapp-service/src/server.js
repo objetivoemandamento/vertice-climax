@@ -13,6 +13,7 @@ import { verifyMercadoPagoSignature, getPackagePrice, isMatchingApprovedPayment 
 import { encryptAuthFiles, decryptAuthFiles } from "./whatsapp-auth-crypto.js";
 import { createVercelProjectSlug, prepareVercelFiles } from "./vercel-publish.js";
 import { preserveServerManagedFields } from "./state-protection.js";
+import { normalizePersistedAutomationState } from "./automation-state.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -257,17 +258,12 @@ async function loadHubStateDb() {
     hubState.projects = Array.isArray(remote.projects) ? remote.projects.slice(-1000) : [];
     hubState.workspaces = remote.workspaces && typeof remote.workspaces === "object" && !Array.isArray(remote.workspaces) ? remote.workspaces : {};
     hubState.workspaceUpdatedAt = remote.workspaceUpdatedAt && typeof remote.workspaceUpdatedAt === "object" && !Array.isArray(remote.workspaceUpdatedAt) ? remote.workspaceUpdatedAt : {};
-    if (typeof remote.automationEnabled === "boolean") automationEnabled = remote.automationEnabled;
-    if (Array.isArray(remote.automationContacts)) {
-      automationContacts.clear();
-      for (const contact of remote.automationContacts.slice(-CHAT_LIMIT)) {
-        if (contact && typeof contact.chatId === "string" && contact.chatId.endsWith("@s.whatsapp.net")) automationContacts.set(contact.chatId, contact);
-      }
-    }
-    if (Array.isArray(remote.processedAutoMessageIds)) {
-      processedAutoMessageIds.clear();
-      for (const id of remote.processedAutoMessageIds.slice(-2000)) if (typeof id === "string") processedAutoMessageIds.add(id);
-    }
+    const restoredAutomation = normalizePersistedAutomationState(remote, CHAT_LIMIT);
+    if (restoredAutomation.enabled !== null) automationEnabled = restoredAutomation.enabled;
+    automationContacts.clear();
+    for (const contact of restoredAutomation.contacts) automationContacts.set(contact.chatId, contact);
+    processedAutoMessageIds.clear();
+    for (const id of restoredAutomation.processedIds) processedAutoMessageIds.add(id);
     await persistStore();
     console.log("Dados centrais restaurados do banco persistente.");
   }
