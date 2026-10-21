@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0d1117"><title>Painel Comercial — Vértice Climax</title>
+<link rel="stylesheet" href="./style.css"><link rel="stylesheet" href="./business.css">
+<script defer src="./business.js"></script>
+</head>
+<body>
+<header class="topbar">
+<a class="brand" href="./index.html"><span class="logo">▲</span><span>Vértice <b>Climax</b><small>PAINEL COMERCIAL</small></span></a>
+<nav><a class="button" href="./index.html">Studio</a><a class="button" href="./whatsapp.html">WhatsApp Web</a><button class="button primary" id="export-csv">Exportar CSV</button></nav>
+</header>
+<section class="hero business-hero"><span class="eyebrow">OPERAÇÃO COMERCIAL LOCAL</span><h1>Da prospecção à <em>entrega.</em></h1><p>Organize empresas, acompanhe negociações e prepare demonstrações. Os registros ficam neste navegador; faça backups regularmente.</p></section>
+<main class="business-main">
+<section class="metrics" aria-label="Indicadores comerciais">
+<article class="metric panel"><span>Empresas</span><strong id="metric-total">0</strong></article>
+<article class="metric panel"><span>Em negociação</span><strong id="metric-negotiation">0</strong></article>
+<article class="metric panel"><span>Vendas pagas</span><strong id="metric-paid">0</strong></article>
+<article class="metric panel"><span>Receita confirmada</span><strong id="metric-revenue">R$ 0</strong></article>
+</section>
+<section class="business-columns">
+<section class="panel business-form-panel">
+<header><span>CADASTRO</span><h2 id="form-title">Adicionar empresa</h2></header>
+<form id="lead-form" class="business-form">
+<input type="hidden" id="lead-id">
+<label>Nome do negócio *<input id="lead-name" required maxlength="120" placeholder="Ex.: Salão Bella"></label>
+<div class="two-fields"><label>Segmento<input id="lead-segment" maxlength="80" placeholder="Salão de beleza"></label><label>Cidade / bairro<input id="lead-location" maxlength="120" placeholder="Cidade, bairro"></label></div>
+<div class="two-fields"><label>Telefone publicado<input id="lead-phone" maxlength="40" placeholder="Telefone confirmado"></label><label>WhatsApp confirmado<input id="lead-whatsapp" maxlength="40" placeholder="Somente número confirmado"></label></div>
+<label>Site próprio<input id="lead-website" type="url" maxlength="500" placeholder="https://..."></label>
+<label>Instagram ou outro perfil<input id="lead-social" maxlength="500" placeholder="Link público"></label>
+<label>Fonte da informação<input id="lead-source" maxlength="500" placeholder="URL do perfil consultado"></label>
+<label>Etapa comercial<select id="lead-stage"><option value="Novo">Novo</option><option value="Pesquisado">Pesquisado</option><option value="Contato autorizado">Contato autorizado</option><option value="Em conversa">Em conversa</option><option value="Interessado">Interessado</option><option value="Proposta enviada">Proposta enviada</option><option value="Aguardando pagamento">Aguardando pagamento</option><option value="Pago">Pago</option><option value="Site entregue">Site entregue</option><option value="Sem interesse">Sem interesse</option></select></label>
+<label>Pacote em avaliação<select id="lead-package"><option value="">Ainda não definido</option><option value="Basico">Básico — R$ 300</option><option value="Medio">Médio — R$ 700</option><option value="Avancado">Avançado — R$ 2.000</option></select></label>
+<label>Observações<textarea id="lead-notes" rows="3" maxlength="3000" placeholder="Necessidades identificadas, histórico ou próximo passo"></textarea></label>
+<label class="consent-row"><input id="lead-consent" type="checkbox"> Existe autorização/base válida documentada para contato comercial pelo WhatsApp.</label>
+<p class="form-note">O cadastro não envia mensagens. Só marque a autorização quando ela realmente existir; respeite recusas e pedidos para parar.</p>
+<div class="form-actions"><button class="button primary" type="submit" id="save-lead">Salvar empresa</button><button class="button" type="button" id="cancel-edit" hidden>Cancelar edição</button></div>
+</form>
+</section>
+<section class="panel leads-panel">
+<header class="leads-header"><div><span>PIPELINE</span><h2>Empresas cadastradas</h2></div><div class="lead-filters"><input id="lead-search" placeholder="Buscar empresa..." aria-label="Buscar empresa"><select id="stage-filter" aria-label="Filtrar por etapa"><option value="">Todas as etapas</option><option>Novo</option><option>Pesquisado</option><option>Contato autorizado</option><option>Em conversa</option><option>Interessado</option><option>Proposta enviada</option><option>Aguardando pagamento</option><option>Pago</option><option>Site entregue</option><option>Sem interesse</option></select></div></header>
+<div class="table-wrap"><table><thead><tr><th>Empresa</th><th>Contato / presença digital</th><th>Etapa</th><th>Pacote</th><th>Ações</th></tr></thead><tbody id="lead-rows"></tbody></table><p id="empty-state" class="empty-state">Nenhuma empresa cadastrada. Adicione uma empresa ou abra o Google Maps para pesquisar negócios.</p></div>
+<div class="lead-footer"><button class="button" id="open-maps">Pesquisar no Google Maps</button><button class="button" id="backup-json">Baixar backup JSON</button><label class="button import-button" for="import-json">Restaurar backup JSON<input id="import-json" type="file" accept="application/json" hidden></label></div>
+</section>
+</section>
+<section class="panel pricing-panel"><header><span>CATÁLOGO COMERCIAL</span><h2>Pacotes e regra financeira</h2></header><div class="pricing-grid">
+<article><span>BÁSICO</span><strong>R$ 300</strong><p>Apresentação, serviços essenciais, localização e contato.</p></article>
+<article><span>MÉDIO</span><strong>R$ 700</strong><p>Mais seções, galeria autorizada e personalização ampliada.</p></article>
+<article><span>AVANÇADO</span><strong>R$ 2.000</strong><p>Projeto mais personalizado e funcionalidades adicionais acordadas.</p></article>
+<article><span>MANUTENÇÃO</span><strong>R$ 50/mês</strong><p>Serviço separado, com escopo e custos de terceiros esclarecidos.</p></article>
+</div><p class="finance-rule"><b>Regra de caixa:</b> não contratar domínio ou hospedagem pagos antes de confirmar o pagamento do cliente e obter a autorização de compra. A demonstração local não equivale a hospedagem pública.</p></section>
+<section class="panel demo-panel"><header><span>DEMONSTRAÇÃO</span><h2>Preparar um site provisório</h2></header><p>Selecione uma empresa na tabela e use “Gerar demonstração HTML”. O arquivo será criado localmente com os dados cadastrados. Confira o conteúdo antes de enviar ao cliente.</p><div id="demo-status" role="status">Nenhuma empresa selecionada.</div><button class="button primary" id="generate-demo" disabled>Gerar demonstração HTML</button></section>
+</main>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body></html>
