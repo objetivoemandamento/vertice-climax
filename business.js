@@ -102,7 +102,10 @@ function saveLead(e){
 }
 function deleteLead(id){
   const l=leads.find(x=>x.id===id);if(!l||!confirm("Excluir "+l.name+" deste navegador?"))return;
-  leads=leads.filter(x=>x.id!==id);if(activeDemoId===id)activeDemoId=null;persist();render();updateDemo();toast("Registro excluído");
+  leads=leads.filter(x=>x.id!==id);if(activeDemoId===id)activeDemoId=null;persist();render();updateDemo();
+void refreshPendingPayments();
+setInterval(()=>{if(!document.hidden)void refreshPendingPayments()},15000);
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)void refreshPendingPayments()});toast("Registro excluído");
 }
 async function createProjectFromLead(id){
   const lead=leads.find(item=>item.id===id);if(!lead)return;
@@ -219,6 +222,33 @@ async function syncHubState(silent=false){
     if(status)status.textContent="Sincronização indisponível: "+e.message+" · os dados locais foram preservados.";
     if(!silent)toast("Falha ao sincronizar: "+e.message);
   }finally{syncBusy=false}
+}
+
+let pendingRefreshBusy=false;
+async function refreshPendingPayments(){
+  if(pendingRefreshBusy||!sessionStorage.getItem(AGENT_TOKEN_KEY)||!leads.some(lead=>lead.stage==="Aguardando pagamento"))return;
+  pendingRefreshBusy=true;
+  try{
+    const remote=await agentRequest("/api/hub/state");
+    const previous=new Map(leads.map(lead=>[lead.id,lead.stage]));
+    const nextLeads=mergeById(leads,remote.leads);
+    const nextProjects=mergeById(hubProjects,remote.projects);
+    const changedLeads=JSON.stringify(nextLeads)!==JSON.stringify(leads);
+    const changedProjects=JSON.stringify(nextProjects)!==JSON.stringify(hubProjects);
+    if(changedLeads){
+      leads=nextLeads;
+      try{localStorage.setItem(STORE,JSON.stringify(leads))}catch{}
+    }
+    if(changedProjects){
+      hubProjects=nextProjects;
+      try{localStorage.setItem(PROJECT_STORE,JSON.stringify(hubProjects))}catch{}
+    }
+    if(changedLeads||changedProjects)render();
+    const paid=leads.find(lead=>previous.get(lead.id)==="Aguardando pagamento"&&["Pago","Site entregue"].includes(lead.stage));
+    if(paid)toast("Pagamento confirmado pelo provedor para "+paid.name+". O projeto foi preparado no Studio.");
+  }catch(e){
+    // A indisponibilidade temporária não altera o estágio local nem confirma pagamentos.
+  }finally{pendingRefreshBusy=false}
 }
 async function checkAgentHealth(){
   const status=$("#agent-connect-status");

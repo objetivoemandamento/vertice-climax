@@ -24,6 +24,8 @@ jobs:
       - name: Check JavaScript syntax
         run: |
           node --check src/server.js
+          node --check ../business.js
+          node --check ../app.js
           node --check src/local-agent.js
           node --check src/mercadopago.js
           node --check src/whatsapp-auth-crypto.js
