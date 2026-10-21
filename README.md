@@ -1,6 +1,6 @@
 # Vértice Climax
 
-Ambiente de programação e automação comercial em português brasileiro. O frontend atual inclui editor de arquivos, pré-visualização HTML, exportação ZIP e painel para conexão do WhatsApp Web.
+Ambiente de programação e automação comercial em português brasileiro. O frontend inclui editor de arquivos, pré-visualização HTML, exportação ZIP, painel comercial local (`business.html`) e painel para conexão do WhatsApp Web.
 
 ## WhatsApp Web
 
@@ -50,7 +50,7 @@ Todas as rotas em `/api` exigem `Authorization: Bearer VERTICE_SERVICE_TOKEN`.
 
 O envio possui validação, limite de taxa e aprovação explícita. Não é um mecanismo de disparo em massa. Utilize apenas para conversas autorizadas, respeite recusas e políticas aplicáveis. A automação não oficial pode gerar restrições à conta.
 
-## Studio de programação
+## Painel comercial local\n\nAbra `business.html` para cadastrar empresas, manter etapas comerciais, registrar autorização de contato, consultar os pacotes Básico (R$ 300), Médio (R$ 700) e Avançado (R$ 2.000), exportar CSV, criar backups JSON e gerar uma demonstração HTML local. Os registros ficam no `localStorage` do navegador; exporte backups para evitar perda de dados. A demonstração HTML não é hospedagem pública e não deve ser apresentada como site publicado. A pesquisa do Google Maps é aberta no navegador para consulta; a coleta automática em escala ainda não está implementada.\n\n## Studio de programação
 
 O editor web permite criar e editar arquivos no navegador, pré-visualizar HTML/CSS/JavaScript e exportar o workspace em ZIP. O workspace fica no armazenamento local do navegador; exporte backups para não perder os arquivos.
 
