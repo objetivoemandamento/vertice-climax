@@ -45,6 +45,14 @@ O serviço salva as credenciais da sessão em `DATA_DIR/auth` e o cache de conve
 
 Não exponha a pasta de dados, o arquivo `.env` ou o token. Faça backups protegidos se precisar preservar a sessão. O cache é limitado e não representa garantia de histórico completo de conversas antigas.
 
+### Agente local de respostas
+
+Na página `whatsapp.html`, o agente local fica desativado por padrão. Para usá-lo, conecte a sessão por QR Code, selecione uma conversa individual, marque que o destinatário autorizou mensagens comerciais e que existe registro dessa autorização, e registre a conversa. Depois, ative o agente.
+
+O agente usa regras locais, não um modelo de linguagem. Ele não inicia conversas nem dispara listas; responde apenas a mensagens recebidas de contatos autorizados. Recusas desativam o contato. Perguntas sobre a origem dos dados, pedidos de demonstração, sinais de compra e mensagens que não correspondem com segurança a uma regra ficam para revisão humana. Isso evita inventar respostas ou prometer entregas que ainda não foram feitas.
+
+Os testes determinísticos do classificador podem ser executados com `npm test` dentro de `whatsapp-service`.
+
 ### Verificação rápida do conector
 
 Com o serviço local rodando, em outro terminal execute:
