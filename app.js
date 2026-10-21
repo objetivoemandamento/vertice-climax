@@ -42,7 +42,8 @@ async function syncWorkspaceWithHub(silent=false){
     }
     const workspaces={...(remote.workspaces||{}),[HUB_WORKSPACE_KEY]:files};
     const workspaceUpdatedAt={...(remote.workspaceUpdatedAt||{}),[HUB_WORKSPACE_KEY]:localStorage.getItem(WORKSPACE_REV)||new Date().toISOString()};
-    const result=await hubRequest("/api/hub/state",{method:"PUT",body:JSON.stringify({leads:remote.leads||[],projects:remote.projects||[],workspaces,workspaceUpdatedAt})});
+    const projects=(remote.projects||[]).map(project=>PROJECT_ID&&project.id===PROJECT_ID?{...project,status:"in-development",updatedAt:new Date().toISOString()}:project);
+    const result=await hubRequest("/api/hub/state",{method:"PUT",body:JSON.stringify({leads:remote.leads||[],projects,workspaces,workspaceUpdatedAt})});
     if(status)status.textContent=(PROJECT_ID?"Projeto "+PROJECT_ID:"Workspace principal")+" sincronizado · "+Object.keys(files).length+" arquivos · núcleo atualizado "+new Date(result.updatedAt).toLocaleTimeString("pt-BR");
     if(!silent)toast("Workspace sincronizado com o núcleo Vértice.");
     return result;
