@@ -937,7 +937,8 @@ app.get("/api/status", (_req, res) => res.json({
   lastConnectionError,
   automationEnabled,
   whatsappAuthPersistence: hubDbReady ? "supabase-encrypted" : "local-only",
-  paymentIntegrationConfigured: Boolean(MP_ACCESS_TOKEN && MP_WEBHOOK_SECRET)
+  paymentIntegrationConfigured: Boolean(MP_ACCESS_TOKEN && MP_WEBHOOK_SECRET),
+  websitePublishingConfigured: Boolean(VERCEL_TOKEN)
 }));
 app.get("/api/automation", (_req, res) => res.json({
   enabled: automationEnabled,
