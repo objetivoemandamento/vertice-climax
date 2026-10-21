@@ -126,6 +126,35 @@ async function loadStore() {
     if (error.code !== "ENOENT") console.error("Cache local inválido; iniciando vazio:", error.message);
   }
 }
+function syncLeadFromIncoming(jid, message) {
+  if (typeof jid !== "string" || !jid.endsWith("@s.whatsapp.net")) return;
+  const digits = jid.split("@")[0].replace(/\\D/g, "");
+  if (!digits) return;
+  const text = safeString(extractText(message), 10000);
+  const decision = text ? classifyIncomingMessage(text) : null;
+  const lead = hubState.leads.find(item => String(item.whatsapp || "").replace(/\\D/g, "") === digits);
+  if (!lead) return;
+  const now = new Date().toISOString();
+  lead.lastInboundAt = now;
+  lead.updatedAt = now;
+  if (decision?.action === "opt_out") {
+    lead.consent = false;
+    lead.doNotContact = true;
+    lead.stage = "Sem interesse";
+  } else if (!lead.doNotContact && !["Sem interesse", "Pago", "Site entregue"].includes(lead.stage)) {
+    lead.stage = "Em conversa";
+  }
+  void persistStore();
+}
+function syncLeadFromOutbound(jid) {
+  if (typeof jid !== "string" || !jid.endsWith("@s.whatsapp.net")) return;
+  const digits = jid.split("@")[0].replace(/\\D/g, "");
+  const lead = hubState.leads.find(item => String(item.whatsapp || "").replace(/\\D/g, "") === digits);
+  if (!lead) return;
+  lead.lastOutboundAt = new Date().toISOString();
+  lead.updatedAt = lead.lastOutboundAt;
+  void persistStore();
+}
 function cacheMessage(jid, message) {
   if (!jid || !message) return;
   const text = safeString(extractText(message), 10000);
@@ -308,7 +337,10 @@ async function startWhatsApp() {
       for (const message of incoming || []) {
         const jid = message.key?.remoteJid;
         cacheMessage(jid, message);
-        if (type === "notify" && !message.key?.fromMe) void processIncomingAutomation(jid, message);
+        if (type === "notify" && !message.key?.fromMe) {
+          syncLeadFromIncoming(jid, message);
+          void processIncomingAutomation(jid, message);
+        }
       }
     });
   } catch (error) {
@@ -504,6 +536,7 @@ app.post("/api/send", async (req, res) => {
       message: { conversation: text.trim() },
       messageTimestamp: Date.now() / 1000
     });
+    syncLeadFromOutbound(chatId);
     return res.json({ ok: true, message: "Mensagem enviada após aprovação explícita", id: sent?.key?.id || null });
   } catch (error) {
     console.error("Falha de envio WhatsApp:", error.message);
