@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 
 const MAX_PLAINTEXT_BYTES = 2_700_000;
-const FILENAME = /^[A-Za-z0-9._-]{1,200}\.json$/;
+const FILENAME = /^[A-Za-z0-9@._:-]{1,200}\.json$/;
 
 function deriveKey(secret) {
   if (typeof secret !== "string" || secret.length < 24) throw new Error("Segredo insuficiente para criptografar a sessão WhatsApp");

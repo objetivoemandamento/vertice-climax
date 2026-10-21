@@ -179,7 +179,12 @@ async function loadWhatsAppAuthFromDb() {
     return;
   }
   if (typeof encrypted === "string" && encrypted) {
-    const files = decryptAuthFiles(encrypted, HUB_DB_SECRET);
+    let files;
+    try { files = decryptAuthFiles(encrypted, HUB_DB_SECRET); }
+    catch (error) {
+      console.error("A sessão WhatsApp remota não pôde ser descriptografada; mantendo os arquivos locais:", error.message);
+      return;
+    }
     await fsp.mkdir(AUTH_DIR, { recursive: true });
     for (const entry of await fsp.readdir(AUTH_DIR, { withFileTypes: true })) {
       if (entry.isFile() && entry.name.endsWith(".json")) await fsp.rm(path.join(AUTH_DIR, entry.name), { force: true });
