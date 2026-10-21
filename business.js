@@ -172,7 +172,9 @@ function mergeById(localItems,remoteItems){
     const previous=map.get(item.id);
     const a=Date.parse(previous?.updatedAt||previous?.createdAt||0)||0;
     const b=Date.parse(item.updatedAt||item.createdAt||0)||0;
-    if(!previous||b>=a)map.set(item.id,item);
+    const winner=!previous||b>=a?item:previous;
+    const optedOut=Boolean(previous?.doNotContact||item.doNotContact||previous?.stage==="Sem interesse"||item.stage==="Sem interesse");
+    map.set(item.id,optedOut?{...winner,doNotContact:true,consent:false,stage:"Sem interesse"}:winner);
   }
   return [...map.values()].sort((a,b)=>(Date.parse(b.updatedAt||b.createdAt||0)||0)-(Date.parse(a.updatedAt||a.createdAt||0)||0));
 }
