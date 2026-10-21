@@ -2,7 +2,7 @@
 "use strict";
 const $=s=>document.querySelector(s);
 const U="vertice_wa_service_url",T="vertice_wa_service_token";
-const DEFAULT_URL="https://vertice-climax-whatsapp.onrender.com";
+const DEFAULT_URL=(location.hostname==="localhost"||location.hostname==="127.0.0.1")?"http://127.0.0.1:8787":"https://vertice-climax-whatsapp.onrender.com";
 let active=null,wasConnected=false,lastChatRefresh=0,pollBusy=false;
 function base(){return ($("#service-url").value||"").trim().replace(/\/+$/,"")}
 function token(){return $("#service-token").value.trim()}
@@ -102,7 +102,7 @@ $("#save").onclick=()=>{
   if(!base())return status("Informe a URL do serviço.");
   if(!token())return status("Informe o token do serviço.");
   localStorage.setItem(U,base());
-  localStorage.setItem(T,token());
+  sessionStorage.setItem(T,token());
   status("Configuração salva neste navegador. Verificando conexão…");
   void checkStatus(false);
 };
@@ -126,7 +126,7 @@ $("#send-form").onsubmit=async e=>{
   finally{$("#send").disabled=!active||!$("#approve").checked}
 };
 $("#service-url").value=localStorage.getItem(U)||DEFAULT_URL;
-$("#service-token").value=localStorage.getItem(T)||"";
+$("#service-token").value=sessionStorage.getItem(T)||localStorage.getItem(T)||"";if(localStorage.getItem(T)){sessionStorage.setItem(T,localStorage.getItem(T));localStorage.removeItem(T)}
 if(token())void checkStatus();
 window.setInterval(()=>{void checkStatus(true);if(wasConnected&&Date.now()-lastChatRefresh>30000)void loadChats()},10000);
 })();
