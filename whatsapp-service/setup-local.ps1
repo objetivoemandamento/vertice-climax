@@ -29,7 +29,7 @@ Set-EnvValue "FRONTEND_ORIGIN" "http://127.0.0.1:8080"
 Set-EnvValue "DATA_DIR" "./data"
 Set-EnvValue "MESSAGE_CACHE_LIMIT" "500"
 Set-EnvValue "CHAT_CACHE_LIMIT" "1000"
-Set-Content -Path $envPath -Value $script:envLines -Encoding ASCII
+Set-Content -Path $envPath -Value $script:envLines.ToArray() -Encoding ASCII
 Write-Host ""
 Write-Host "Vértice Climax - conector local" -ForegroundColor Cyan
 Write-Host "Token salvo em whatsapp-service\.env; copie VERTICE_SERVICE_TOKEN para o campo Token do serviço no painel."
