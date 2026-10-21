@@ -128,11 +128,11 @@ async function loadStore() {
 }
 function syncLeadFromIncoming(jid, message) {
   if (typeof jid !== "string" || !jid.endsWith("@s.whatsapp.net")) return;
-  const digits = jid.split("@")[0].replace(/\\D/g, "");
+  const digits = jid.split("@")[0].replace(/\D/g, "");
   if (!digits) return;
   const text = safeString(extractText(message), 10000);
   const decision = text ? classifyIncomingMessage(text) : null;
-  const lead = hubState.leads.find(item => String(item.whatsapp || "").replace(/\\D/g, "") === digits);
+  const lead = hubState.leads.find(item => String(item.whatsapp || "").replace(/\D/g, "") === digits);
   if (!lead) return;
   const now = new Date().toISOString();
   lead.lastInboundAt = now;
@@ -148,8 +148,8 @@ function syncLeadFromIncoming(jid, message) {
 }
 function syncLeadFromOutbound(jid) {
   if (typeof jid !== "string" || !jid.endsWith("@s.whatsapp.net")) return;
-  const digits = jid.split("@")[0].replace(/\\D/g, "");
-  const lead = hubState.leads.find(item => String(item.whatsapp || "").replace(/\\D/g, "") === digits);
+  const digits = jid.split("@")[0].replace(/\D/g, "");
+  const lead = hubState.leads.find(item => String(item.whatsapp || "").replace(/\D/g, "") === digits);
   if (!lead) return;
   lead.lastOutboundAt = new Date().toISOString();
   lead.updatedAt = lead.lastOutboundAt;
