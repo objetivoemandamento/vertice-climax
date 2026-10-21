@@ -228,7 +228,10 @@ function hubStateSnapshot() {
     leads: hubState.leads,
     projects: hubState.projects,
     workspaces: hubState.workspaces,
-    workspaceUpdatedAt: hubState.workspaceUpdatedAt
+    workspaceUpdatedAt: hubState.workspaceUpdatedAt,
+    automationEnabled,
+    automationContacts: [...automationContacts.values()].slice(-CHAT_LIMIT),
+    processedAutoMessageIds: [...processedAutoMessageIds].slice(-2000)
   };
 }
 async function persistHubStateDb() {
@@ -241,8 +244,8 @@ async function loadHubStateDb() {
     return;
   }
   const remote = await hubDbRpc("get_state", {});
-  const remoteHasData = Boolean(remote && (remote.updatedAt || remote.leads?.length || remote.projects?.length || Object.keys(remote.workspaces || {}).length));
-  const localHasData = Boolean(hubState.updatedAt || hubState.leads.length || hubState.projects.length || Object.keys(hubState.workspaces).length);
+  const remoteHasData = Boolean(remote && (remote.updatedAt || remote.leads?.length || remote.projects?.length || Object.keys(remote.workspaces || {}).length || remote.automationContacts?.length || remote.automationEnabled === true));
+  const localHasData = Boolean(hubState.updatedAt || hubState.leads.length || hubState.projects.length || Object.keys(hubState.workspaces).length || automationContacts.size || automationEnabled);
   if (!remoteHasData && localHasData) {
     await persistHubStateDb();
     console.log("Dados centrais locais migrados para o banco persistente.");
@@ -254,6 +257,17 @@ async function loadHubStateDb() {
     hubState.projects = Array.isArray(remote.projects) ? remote.projects.slice(-1000) : [];
     hubState.workspaces = remote.workspaces && typeof remote.workspaces === "object" && !Array.isArray(remote.workspaces) ? remote.workspaces : {};
     hubState.workspaceUpdatedAt = remote.workspaceUpdatedAt && typeof remote.workspaceUpdatedAt === "object" && !Array.isArray(remote.workspaceUpdatedAt) ? remote.workspaceUpdatedAt : {};
+    if (typeof remote.automationEnabled === "boolean") automationEnabled = remote.automationEnabled;
+    if (Array.isArray(remote.automationContacts)) {
+      automationContacts.clear();
+      for (const contact of remote.automationContacts.slice(-CHAT_LIMIT)) {
+        if (contact && typeof contact.chatId === "string" && contact.chatId.endsWith("@s.whatsapp.net")) automationContacts.set(contact.chatId, contact);
+      }
+    }
+    if (Array.isArray(remote.processedAutoMessageIds)) {
+      processedAutoMessageIds.clear();
+      for (const id of remote.processedAutoMessageIds.slice(-2000)) if (typeof id === "string") processedAutoMessageIds.add(id);
+    }
     await persistStore();
     console.log("Dados centrais restaurados do banco persistente.");
   }
@@ -414,6 +428,7 @@ async function processIncomingAutomation(jid, message) {
     contact.stage = "Sem interesse";
   }
   void persistStore();
+  if (hubDbReady) void persistHubStateDb().catch(error => console.error("Falha ao persistir estado do agente:", error.message));
   if (!decision.reply || !["reply", "opt_out"].includes(decision.action)) {
     if (contact.needsHuman) console.log("Agente local aguardando revisão humana para", jid);
     return;
@@ -963,6 +978,7 @@ app.post("/api/automation/config", (req, res) => {
   if (typeof req.body?.enabled !== "boolean") return res.status(400).json({ error: "enabled deve ser booleano" });
   automationEnabled = req.body.enabled;
   void persistStore();
+  if (hubDbReady) void persistHubStateDb().catch(error => console.error("Falha ao persistir configuração de automação:", error.message));
   return res.json({ ok: true, enabled: automationEnabled });
 });
 app.post("/api/automation/contacts", (req, res) => {
@@ -989,6 +1005,7 @@ app.post("/api/automation/contacts", (req, res) => {
   };
   automationContacts.set(chatId, contact);
   void persistStore();
+  if (hubDbReady) void persistHubStateDb().catch(error => console.error("Falha ao persistir contato de automação:", error.message));
   return res.json({ ok: true, contact: { chatId: contact.chatId, name: contact.name, enabled: contact.enabled, stage: contact.stage } });
 });
 app.delete("/api/automation/contacts/:chatId", (req, res) => {
@@ -1001,6 +1018,7 @@ app.delete("/api/automation/contacts/:chatId", (req, res) => {
   contact.stage = "Desativado";
   contact.updatedAt = Date.now();
   void persistStore();
+  if (hubDbReady) void persistHubStateDb().catch(error => console.error("Falha ao persistir desativação do contato:", error.message));
   return res.json({ ok: true, message: "Agente desativado para este contato" });
 });
 app.get("/api/qr", async (_req, res) => {
