@@ -501,7 +501,7 @@ async function processIncomingAutomation(jid, message) {
       const sent = await sock.sendMessage(jid, { text: chargeText });
       const now = new Date().toISOString();
       lead.stage = "Aguardando pagamento"; lead.paymentProvider = "pix"; lead.paymentStatus = "awaiting_receipt"; lead.paymentAmount = price; lead.paymentCurrency = "BRL"; lead.paymentRequestedAt = now; lead.paymentReceiptReceivedAt = null; lead.paymentReviewRequired = false; lead.paymentReviewReason = null; lead.paymentId = null; lead.updatedAt = now;
-      contact.stage = "Aguardando pagamento"; contact.needsHuman = false; contact.lastReason = null;
+      contact.stage = "Aguardando pagamento"; contact.packageChosenByClient = false; contact.needsHuman = false; contact.lastReason = null;
       cacheMessage(jid, { key: { id: sent?.key?.id || crypto.randomUUID(), fromMe: true, remoteJid: jid }, message: { conversation: chargeText }, messageTimestamp: Date.now() / 1000 });
       await persistStore(); await persistHubStateDb();
       console.log("Cobrança Pix enviada após confirmação explícita de contratação:", jid);
@@ -785,6 +785,8 @@ app.post("/api/payments/pix-charge", async (req, res) => {
     lead.paymentReviewReason = null;
     lead.paymentId = null;
     lead.updatedAt = now;
+    const autoContact = automationContacts.get(chatId);
+    if (autoContact) { autoContact.packageChosenByClient = false; autoContact.stage = "Aguardando pagamento"; autoContact.needsHuman = false; }
     cacheMessage(chatId, { key: { id: sent?.key?.id || crypto.randomUUID(), fromMe: true, remoteJid: chatId }, message: { conversation: message }, messageTimestamp: Date.now() / 1000 });
     await persistStore();
     await persistHubStateDb();
