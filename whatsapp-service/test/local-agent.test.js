@@ -50,3 +50,9 @@ test("escolha de pacote pede confirmação explícita antes de cobrar", () => {
   assert.equal(result.packageKey, "Avancado");
   assert.match(result.reply, /Só envio a cobrança se você confirmar/i);
 });
+
+test("resposta curta de confirmação autoriza a cobrança só após seleção de pacote", () => {
+  const result = classifyIncomingMessage("Sim, pode", "Interessado", { packageKey: "Avancado" });
+  assert.equal(result.action, "confirm_purchase");
+  assert.equal(result.packageKey, "Avancado");
+});
