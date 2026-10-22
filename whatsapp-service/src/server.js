@@ -111,6 +111,23 @@ function escapeHtml(value) {
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
   })[character]);
 }
+function createLeadDraftWorkspace(lead) {
+  const esc = value => escapeHtml(safeString(value, 3000));
+  const name = esc(lead.name || "Negócio local");
+  const segment = esc(lead.segment || "Negócio local");
+  const location = esc(lead.location || "Localização a confirmar");
+  const notes = esc(lead.notes || "");
+  const phone = String(lead.whatsapp || "").replace(/\D/g, "");
+  const contactLink = phone && lead.consent === true && lead.consentEvidence && !lead.doNotContact
+    ? '<a class="cta" href="https://wa.me/' + phone + '">Falar pelo WhatsApp</a>'
+    : "";
+  const notesHtml = notes ? '<p>' + notes.replace(/\r?\n/g, "<br>") + '</p>' : '<p>Os detalhes dos serviços serão preenchidos com as informações confirmadas pelo negócio.</p>';
+  return {
+    "index.html": '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>' + name + ' — Demonstração</title><meta name="description" content="Demonstração inicial para ' + name + '"><link rel="stylesheet" href="style.css"></head><body><main class="wrap"><header><span class="tag">' + segment + '</span><span class="status">Prévia em preparação</span></header><section class="hero"><p class="tag">Presença digital</p><h1>' + name + '</h1><p>Uma apresentação clara do negócio, seus serviços e formas de contato.</p>' + contactLink + '</section><section class="card"><h2>Sobre o negócio</h2>' + notesHtml + '</section><section class="card"><h2>Localização</h2><p>' + location + '</p></section><footer>Rascunho gerado com as informações disponíveis. Revise serviços, imagens, contatos e conteúdo antes de publicar.</footer></main></body></html>',
+    "style.css": ':root{color-scheme:dark;--bg:#08111b;--panel:#101d2b;--line:#24394d;--text:#f4f8fc;--muted:#a8b8c8;--accent:#67e8f9}*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at top,#122c43 0,#08111b 58%);color:var(--text);font-family:Inter,system-ui,sans-serif;line-height:1.65}.wrap{max-width:1000px;margin:auto;padding:clamp(20px,5vw,56px)}header{display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:18px}.tag{color:var(--accent);font-size:.8rem;letter-spacing:.15em;text-transform:uppercase}.status{color:var(--muted);font-size:.8rem}.hero{padding:clamp(55px,10vw,110px) 0;max-width:780px}.hero h1{font-size:clamp(2.7rem,8vw,6rem);line-height:1.05;margin:12px 0}.hero p,.card p,footer{color:var(--muted)}.cta{display:inline-block;margin-top:16px;padding:12px 18px;border-radius:9px;background:var(--accent);color:#06131b;text-decoration:none;font-weight:700}.card{padding:24px;margin:16px 0;background:var(--panel);border:1px solid var(--line);border-radius:16px}.card h2{margin-top:0}footer{margin-top:36px;border-top:1px solid var(--line);padding-top:20px;font-size:.82rem}@media(max-width:520px){.wrap{padding:18px}.card{padding:18px}}'
+  };
+}
+
 function createPaidProjectWorkspace(lead, now) {
   const existing = hubState.projects.find(project => project.leadId === lead.id);
   const id = existing?.id || crypto.randomUUID();
@@ -137,6 +154,10 @@ function createPaidProjectWorkspace(lead, now) {
   project.updatedAt = now;
   if (!existing) hubState.projects.push(project);
   const workspaceKey = "project:" + id;
+  if (!hubState.workspaces[workspaceKey] && hubState.workspaces["draft:" + lead.id]) {
+    hubState.workspaces[workspaceKey] = hubState.workspaces["draft:" + lead.id];
+    delete hubState.workspaces["draft:" + lead.id];
+  }
   if (!hubState.workspaces[workspaceKey]) hubState.workspaces[workspaceKey] = {
     "index.html": `<!doctype html>
 <html lang="pt-BR">
@@ -360,7 +381,7 @@ function syncLeadFromIncoming(jid, message) {
     lead.consent = false;
     lead.doNotContact = true;
     lead.stage = "Sem interesse";
-  } else if (!lead.doNotContact && !["Sem interesse", "Pago", "Site entregue"].includes(lead.stage)) {
+  } else if (!lead.doNotContact && !["Sem interesse", "Pago", "Site entregue", "Proposta enviada", "Aguardando pagamento"].includes(lead.stage)) {
     lead.stage = "Em conversa";
   }
   void persistStore();
@@ -444,11 +465,53 @@ async function processIncomingAutomation(jid, message) {
   if (!text.trim()) return;
   processedAutoMessageIds.add(id);
   while (processedAutoMessageIds.size > 2000) processedAutoMessageIds.delete(processedAutoMessageIds.values().next().value);
-  const decision = classifyIncomingMessage(text, contact.stage || "inicio");
+  const leadDigits = jid.split("@")[0].replace(/\D/g, "");
+  const lead = hubState.leads.find(item => String(item.whatsapp || "").replace(/\D/g, "") === leadDigits);
+  const decision = classifyIncomingMessage(text, contact.stage || "inicio", { packageKey: contact.packageKey || lead?.packageKey || null });
   contact.lastInboundAt = Date.now();
   contact.lastReason = decision.reason || null;
   contact.stage = decision.stage || contact.stage || "inicio";
   contact.needsHuman = decision.action === "human_review";
+  if (decision.action === "select_package" && lead) {
+    lead.packageKey = decision.packageKey;
+    lead.stage = "Interessado";
+    lead.updatedAt = new Date().toISOString();
+    contact.packageKey = decision.packageKey;
+    contact.stage = "Interessado";
+  }
+  if (decision.action === "confirm_purchase") {
+    if (!lead || lead.consent !== true || !lead.consentEvidence || lead.doNotContact || !lead.packageKey || !PIX_KEY || !PIX_HOLDER) {
+      contact.needsHuman = true;
+      contact.lastReason = "Contratação indicada, mas falta validar dados, autorização, pacote ou configuração Pix.";
+      void persistStore();
+      if (hubDbReady) void persistHubStateDb().catch(error => console.error("Falha ao persistir estado do agente:", error.message));
+      return;
+    }
+    const price = getPackagePrice(lead.packageKey);
+    if (price === null || !connected || !sock || !sendRateLimit(jid)) {
+      contact.needsHuman = true;
+      contact.lastReason = "Não foi possível enviar a cobrança automaticamente; revisar conexão, pacote e limite de envio.";
+      void persistStore();
+      return;
+    }
+    try {
+      const chargeText = buildPixChargeMessage({ leadName: safeString(lead.name, 120), packageKey: lead.packageKey, amount: price, pixKey: PIX_KEY, pixHolder: PIX_HOLDER, pixBank: PIX_BANK });
+      hubState.workspaces["draft:" + lead.id] = createLeadDraftWorkspace(lead);
+      const sent = await sock.sendMessage(jid, { text: chargeText });
+      const now = new Date().toISOString();
+      lead.stage = "Aguardando pagamento"; lead.paymentProvider = "pix"; lead.paymentStatus = "awaiting_receipt"; lead.paymentAmount = price; lead.paymentCurrency = "BRL"; lead.paymentRequestedAt = now; lead.paymentReceiptReceivedAt = null; lead.paymentReviewRequired = false; lead.paymentReviewReason = null; lead.paymentId = null; lead.updatedAt = now;
+      contact.stage = "Aguardando pagamento"; contact.needsHuman = false; contact.lastReason = null;
+      cacheMessage(jid, { key: { id: sent?.key?.id || crypto.randomUUID(), fromMe: true, remoteJid: jid }, message: { conversation: chargeText }, messageTimestamp: Date.now() / 1000 });
+      await persistStore(); await persistHubStateDb();
+      console.log("Cobrança Pix enviada após confirmação explícita de contratação:", jid);
+      return;
+    } catch (error) {
+      contact.needsHuman = true; contact.lastReason = "Falha ao enviar a cobrança Pix; revisar manualmente.";
+      void persistStore();
+      console.error("Cobrança Pix automática falhou:", error.message);
+      return;
+    }
+  }
   if (decision.action === "opt_out") {
     contact.enabled = false;
     contact.consent = false;
@@ -456,7 +519,7 @@ async function processIncomingAutomation(jid, message) {
   }
   void persistStore();
   if (hubDbReady) void persistHubStateDb().catch(error => console.error("Falha ao persistir estado do agente:", error.message));
-  if (!decision.reply || !["reply", "opt_out"].includes(decision.action)) {
+  if (!decision.reply || !["reply", "opt_out", "select_package"].includes(decision.action)) {
     if (contact.needsHuman) console.log("Agente local aguardando revisão humana para", jid);
     return;
   }
@@ -706,6 +769,7 @@ app.post("/api/payments/pix-charge", async (req, res) => {
   const chatId = digits + "@s.whatsapp.net";
   if (!sendRateLimit(chatId)) return res.status(429).json({ error: "Limite de envio atingido. Aguarde antes de enviar outra mensagem." });
   try {
+    hubState.workspaces["draft:" + lead.id] = createLeadDraftWorkspace(lead);
     const message = buildPixChargeMessage({ leadName: safeString(lead.name, 120), packageKey: lead.packageKey, amount: price, pixKey: PIX_KEY, pixHolder: PIX_HOLDER, pixBank: PIX_BANK });
     const sent = await sock.sendMessage(chatId, { text: message });
     const now = new Date().toISOString();
@@ -823,7 +887,7 @@ app.post("/api/projects/:projectId/publish", async (req, res) => {
   const project = hubState.projects.find(item => item.id === req.params.projectId);
   if (!project) return res.status(404).json({ error: "Projeto não encontrado." });
   const lead = hubState.leads.find(item => item.id === project.leadId);
-  if (!lead || lead.paymentStatus !== "approved" || !lead.paymentId) {
+  if (!lead || lead.paymentStatus !== "approved" || !(lead.paymentId || lead.paymentProvider === "pix")) {
     return res.status(409).json({ error: "A publicação só é permitida após confirmação real do pagamento pelo webhook." });
   }
   const workspaceKey = "project:" + project.id;
@@ -929,7 +993,7 @@ app.get("/api/projects/:projectId/publish-status", async (req, res) => {
     if (alias) project.publicUrl = "https://" + String(alias).replace(/^https?:\/\//i, "");
     project.updatedAt = new Date().toISOString();
     const lead = hubState.leads.find(item => item.id === project.leadId);
-    if (state === "READY" && lead && lead.paymentStatus === "approved" && lead.paymentId) {
+    if (state === "READY" && lead && lead.paymentStatus === "approved" && (lead.paymentId || lead.paymentProvider === "pix")) {
       project.publishedAt = project.publishedAt || project.updatedAt;
       lead.websiteUrl = project.publicUrl;
       lead.websitePublishedAt = project.publishedAt;
@@ -1076,6 +1140,39 @@ app.post("/api/automation/config", (req, res) => {
   if (hubDbReady) void persistHubStateDb().catch(error => console.error("Falha ao persistir configuração de automação:", error.message));
   return res.json({ ok: true, enabled: automationEnabled });
 });
+app.post("/api/automation/start-outreach", async (req, res) => {
+  const leadId = typeof req.body?.leadId === "string" ? req.body.leadId.trim() : "";
+  if (req.body?.approved !== true) return res.status(400).json({ error: "Aprovação explícita da primeira mensagem obrigatória." });
+  const lead = hubState.leads.find(item => item.id === leadId);
+  if (!lead) return res.status(404).json({ error: "Empresa não encontrada no núcleo central. Sincronize o CRM e tente novamente." });
+  if (lead.consent !== true || !safeString(lead.consentEvidence, 500).trim() || lead.doNotContact || lead.stage === "Sem interesse") return res.status(403).json({ error: "Só é possível iniciar a abordagem com autorização comercial válida e sem pedido de interrupção." });
+  const digits = String(lead.whatsapp || "").replace(/\D/g, "");
+  if (digits.length < 12 || digits.length > 15) return res.status(400).json({ error: "Cadastre o WhatsApp confirmado com código do país e DDD." });
+  if (!connected || !sock) return res.status(409).json({ error: "WhatsApp não conectado. Conecte pelo QR Code antes de iniciar a abordagem." });
+  const chatId = digits + "@s.whatsapp.net";
+  if (!sendRateLimit(chatId)) return res.status(429).json({ error: "Limite de envio atingido. Aguarde antes de iniciar outra conversa." });
+  const segment = safeString(lead.segment, 100);
+  const opener = "Olá, " + safeString(lead.name, 120) + "! Aqui é do Vértice Climax." +
+    (segment ? " Vi que vocês atuam no segmento de " + segment + "." : "") +
+    " Ajudamos negócios a apresentar serviços em um site profissional e facilitar o contato com clientes. Posso te fazer uma pergunta rápida para entender se isso seria útil para vocês?";
+  try {
+    const sent = await sock.sendMessage(chatId, { text: opener });
+    const old = automationContacts.get(chatId) || {};
+    automationContacts.set(chatId, { ...old, chatId, name: safeString(lead.name, 120), leadId: lead.id, consent: true, consentEvidence: safeString(lead.consentEvidence, 500), enabled: true, stage: "abordagem", packageKey: lead.packageKey || null, updatedAt: Date.now(), needsHuman: false });
+    automationEnabled = true;
+    lead.stage = "Em conversa";
+    lead.firstOutreachAt = new Date().toISOString();
+    lead.updatedAt = lead.firstOutreachAt;
+    cacheMessage(chatId, { key: { id: sent?.key?.id || crypto.randomUUID(), fromMe: true, remoteJid: chatId }, message: { conversation: opener }, messageTimestamp: Date.now() / 1000 });
+    await persistStore();
+    await persistHubStateDb();
+    return res.json({ ok: true, sent: true, message: "Primeira abordagem enviada e agente de respostas ativado para este contato." });
+  } catch (error) {
+    console.error("Falha ao iniciar abordagem comercial:", error.message);
+    return res.status(502).json({ error: "Não foi possível enviar a primeira abordagem." });
+  }
+});
+
 app.post("/api/automation/contacts", (req, res) => {
   const { chatId, name, consent, consentEvidence } = req.body || {};
   if (typeof chatId !== "string" || !chatId.endsWith("@s.whatsapp.net") || chatId.length > 180) {
