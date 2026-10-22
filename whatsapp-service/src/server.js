@@ -973,7 +973,7 @@ app.put("/api/hub/state", async (req, res) => {
       return res.status(400).json({ error: "Cada lead precisa de id e nome válidos" });
     }
     const previousLeads = new Map(hubState.leads.map(item => [item.id, item]));
-    const serverManagedLeadFields = ["paymentStatus", "paymentProvider", "paymentId", "paymentAmount", "paymentCurrency", "paymentApprovedAt", "paymentPreferenceId", "paymentInitPoint", "paymentReviewRequired", "paymentReviewReason", "projectId", "websiteUrl", "websitePublishedAt"];
+    const serverManagedLeadFields = ["paymentStatus", "paymentProvider", "paymentId", "paymentAmount", "paymentCurrency", "paymentApprovedAt", "paymentPreferenceId", "paymentInitPoint", "paymentRequestedAt", "paymentReceiptReceivedAt", "paymentConfirmationMethod", "paymentConfirmationEvidence", "paymentReviewRequired", "paymentReviewReason", "lastPaymentReceiptMessageId", "lastPaymentReceiptAcknowledgedId", "projectId", "websiteUrl", "websitePublishedAt"];
     hubState.leads = input.leads.map(item => {
       const previous = previousLeads.get(item.id);
       const optedOut = Boolean(previous?.doNotContact || previous?.stage === "Sem interesse" || item.doNotContact === true || item.stage === "Sem interesse");
@@ -1000,12 +1000,12 @@ app.put("/api/hub/state", async (req, res) => {
       const previous = previousProjects.get(item.id);
       if (previous) return preserveServerManagedFields(item, previous, serverManagedProjectFields);
       const lead = hubState.leads.find(candidate => candidate.id === item.leadId);
-      if (!lead || lead.paymentStatus !== "approved" || !lead.paymentId) return null;
+      if (!lead || lead.paymentStatus !== "approved" || !(lead.paymentId || lead.paymentProvider === "pix")) return null;
       const safeProject = preserveServerManagedFields(item, null, serverManagedProjectFields);
       safeProject.leadId = lead.id;
       safeProject.paymentStatus = lead.paymentStatus;
       safeProject.paymentProvider = lead.paymentProvider;
-      safeProject.paymentId = lead.paymentId;
+      safeProject.paymentId = lead.paymentId || null;
       safeProject.createdAt = new Date().toISOString();
       return safeProject;
     }).filter(Boolean);
