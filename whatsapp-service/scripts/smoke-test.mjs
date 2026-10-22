@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 
-const base = (process.env.BASE_URL || "http://127.0.0.1:" + (process.env.PORT || "8787")).replace(/\\/+$/, "");
+const base = (process.env.BASE_URL || "http://127.0.0.1:" + (process.env.PORT || "8787")).replace(/\/+$/, "");
 const token = process.env.VERTICE_SERVICE_TOKEN || "";
-const remote = !/^https?:\\/\\/(localhost|127\\.0\\.0\\.1)(:\\d+)?$/i.test(base);
+const remote = !["http://localhost", "https://localhost", "http://127.0.0.1", "https://127.0.0.1"]
+  .some(prefix => base === prefix || base.startsWith(prefix + ":"));
 if (remote && process.env.ALLOW_REMOTE_SMOKE !== "1") {
   console.error("Por segurança, o smoke test só executa em localhost. Para um endpoint remoto, defina ALLOW_REMOTE_SMOKE=1 explicitamente.");
   process.exit(2);
@@ -41,7 +42,7 @@ if (token) {
   } while (Date.now() < deadline);
   assert.equal(qrResult.response.status, 200, "QR real deve estar disponível no prazo de teste");
   assert.equal(qrResult.body.connected, false, "QR deve representar um fluxo de pareamento ainda não concluído");
-  assert.match(qrResult.body.qrDataUrl || "", /^data:image\\/png;base64,/, "endpoint deve retornar um QR PNG renderizado");
+  assert.ok((qrResult.body.qrDataUrl || "").startsWith("data:image/png;base64,"), "endpoint deve retornar um QR PNG renderizado");
   console.log("PASS QR real gerado e servido pelo endpoint");
 } else {
   console.log("SKIP status/QR autenticado: defina VERTICE_SERVICE_TOKEN para testar o pareamento");
