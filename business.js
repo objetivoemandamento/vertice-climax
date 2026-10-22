@@ -70,6 +70,7 @@ function render(){
     if(l.consent&&l.consentEvidence&&!l.doNotContact&&l.stage!=="Sem interesse"&&normalizedPhone(l.whatsapp)){
       const a=element("a","button","Abrir WhatsApp");a.href="https://wa.me/"+normalizedPhone(l.whatsapp);a.target="_blank";a.rel="noopener noreferrer";a.title="Abre o contato; não envia mensagem automaticamente";stack.append(a);
       if(normalizedPhone(l.whatsapp).length>=12&&normalizedPhone(l.whatsapp).length<=15)stack.append(button("Registrar no agente","",()=>registerLeadWithAgent(l.id)));
+      stack.append(button("Iniciar abordagem com IA","",()=>startLeadOutreach(l.id)));
     }
     stack.append(button("Excluir","",()=>deleteLead(l.id)));
     actions.append(stack);tr.append(actions);body.append(tr);
@@ -332,6 +333,18 @@ async function registerLeadWithAgent(id){
     await agentRequest("/api/automation/contacts",{method:"POST",body:JSON.stringify({chatId:digits+"@s.whatsapp.net",name:lead.name,consent:true,consentEvidence:lead.consentEvidence})});
     lead.agentRegisteredAt=new Date().toISOString();persist();render();toast("Contato autorizado registrado no agente.");
   }catch(e){toast("Não foi possível registrar: "+e.message)}
+}
+async function startLeadOutreach(id){
+  const lead=leads.find(item=>item.id===id);if(!lead)return;
+  if(!lead.consent||!lead.consentEvidence||lead.doNotContact||lead.stage==="Sem interesse"){toast("Registre autorização comercial válida antes de iniciar a abordagem.");return}
+  if(!normalizedPhone(lead.whatsapp)){toast("Cadastre o WhatsApp confirmado do cliente.");return}
+  if(!confirm("Enviar a primeira mensagem para "+lead.name+" e ativar as respostas automáticas deste contato? A autorização comercial precisa ser real e registrada."))return;
+  try{
+    await syncHubState(true);
+    const result=await agentRequest("/api/automation/start-outreach",{method:"POST",body:JSON.stringify({leadId:lead.id,approved:true})});
+    lead.stage="Em conversa";lead.firstOutreachAt=new Date().toISOString();lead.updatedAt=lead.firstOutreachAt;
+    persist();render();toast(result.message||"Abordagem enviada.");
+  }catch(e){toast("Não foi possível iniciar a abordagem: "+e.message)}
 }
 function demoHtml(l){
   const name=esc(l.name),segment=esc(l.segment||"Negócio local"),location=esc(l.location||"Localização a confirmar");
