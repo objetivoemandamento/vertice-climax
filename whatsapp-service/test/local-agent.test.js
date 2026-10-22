@@ -22,7 +22,7 @@ test("resposta sobre Instagram continua a descoberta", () => {
   const result = classifyIncomingMessage("A gente mostra pelo Instagram", "inicio");
   assert.equal(result.action, "reply");
   assert.equal(result.stage, "Descoberta");
-  assert.match(result.reply, /facilita o contato/i);
+  assert.match(result.reply, /entrar em contato facilmente/i);
 });
 
 test("pergunta sobre a origem do contato exige revisão humana", () => {

@@ -1224,7 +1224,7 @@ app.get("/api/qr", async (_req, res) => {
   }
   if (!qr) return res.status(202).json({ message: "QR ainda não disponível; tente novamente em alguns segundos" });
   try {
-    return res.json({ connected: false, qrDataUrl: await QRCode.toDataURL(qr, { width: 360, margin: 2 }) });
+    return res.json({ connected: false, qrDataUrl: await QRCode.toDataURL(qr, { width: 512, margin: 2, errorCorrectionLevel: "L" }) });
   } catch (error) {
     console.error("Falha ao gerar QR:", error.message);
     return res.status(500).json({ error: "Falha ao gerar QR Code" });

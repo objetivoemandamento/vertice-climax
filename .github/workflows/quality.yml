@@ -43,3 +43,20 @@ jobs:
           node --check scripts/smoke-test.mjs
       - name: Run local agent unit tests
         run: npm test
+
+      - name: Start isolated WhatsApp service and verify QR
+        env:
+          PORT: 8787
+          DATA_DIR: ${{ runner.temp }}/vertice-whatsapp-qr
+        run: |
+          export VERTICE_SERVICE_TOKEN="$(node -e 'process.stdout.write(require("node:crypto").randomBytes(32).toString("hex"))')"
+          npm start > "$RUNNER_TEMP/whatsapp-service.log" 2>&1 &
+          whatsapp_service_pid=$!
+          trap 'kill "$whatsapp_service_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:8787/health >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          npm run smoke
