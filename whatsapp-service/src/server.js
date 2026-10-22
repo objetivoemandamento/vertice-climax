@@ -14,6 +14,7 @@ import { encryptAuthFiles, decryptAuthFiles } from "./whatsapp-auth-crypto.js";
 import { createVercelProjectSlug, prepareVercelFiles } from "./vercel-publish.js";
 import { preserveServerManagedFields } from "./state-protection.js";
 import { normalizePersistedAutomationState } from "./automation-state.js";
+import { buildPixChargeMessage, isPixReceiptAttachment } from "./pix-payment.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -31,6 +32,9 @@ const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || "";
 const HUB_DB_SECRET = process.env.HUB_DB_SECRET || "";
 const MP_ACCESS_TOKEN = process.env.MERCADOPAGO_ACCESS_TOKEN || "";
 const MP_WEBHOOK_SECRET = process.env.MERCADOPAGO_WEBHOOK_SECRET || "";
+const PIX_KEY = (process.env.PIX_KEY || "").trim();
+const PIX_HOLDER = (process.env.PIX_HOLDER || "").trim();
+const PIX_BANK = (process.env.PIX_BANK || "").trim();
 const PUBLIC_SERVICE_URL = (process.env.PUBLIC_SERVICE_URL || "https://vertice-climax-whatsapp.onrender.com").replace(/\/+$/, "");
 const FRONTEND_PUBLIC_URL = (process.env.FRONTEND_ORIGIN || "https://vertice-climax.onrender.com").split(",")[0].trim().replace(/\/+$/, "");
 const VERCEL_TOKEN = process.env.VERCEL_TOKEN || "";
@@ -342,6 +346,16 @@ function syncLeadFromIncoming(jid, message) {
   const now = new Date().toISOString();
   lead.lastInboundAt = now;
   lead.updatedAt = now;
+  if (!message?.key?.fromMe && isPixReceiptAttachment(message) && ["awaiting_receipt", "receipt_submitted"].includes(lead.paymentStatus)) {
+    lead.paymentStatus = "receipt_submitted";
+    lead.paymentReceiptReceivedAt = now;
+    lead.paymentReviewRequired = true;
+    lead.paymentReviewReason = "Comprovante recebido; confirmar o crédito no extrato bancário antes de liberar o projeto.";
+    lead.lastPaymentReceiptMessageId = safeString(message?.key?.id, 200) || null;
+    void persistStore();
+    void persistHubStateDb().catch(error => console.error("Falha ao salvar comprovante Pix recebido:", error.message));
+    void acknowledgePixReceipt(jid, lead, message);
+  }
   if (decision?.action === "opt_out") {
     lead.consent = false;
     lead.doNotContact = true;
@@ -352,6 +366,23 @@ function syncLeadFromIncoming(jid, message) {
   void persistStore();
   void persistHubStateDb().catch(error => console.error("Falha ao salvar lead no banco central:", error.message));
 }
+async function acknowledgePixReceipt(jid, lead, message) {
+  const messageId = safeString(message?.key?.id, 200);
+  if (!sock || !connected || !messageId || lead.lastPaymentReceiptAcknowledgedId === messageId) return;
+  if (!sendRateLimit(jid)) return;
+  const reply = "Recebi o comprovante, obrigado. Ele está aguardando conferência do crédito na conta. O projeto só será liberado depois da confirmação do recebimento.";
+  try {
+    const sent = await sock.sendMessage(jid, { text: reply });
+    lead.lastPaymentReceiptAcknowledgedId = messageId;
+    lead.updatedAt = new Date().toISOString();
+    cacheMessage(jid, { key: { id: sent?.key?.id || crypto.randomUUID(), fromMe: true, remoteJid: jid }, message: { conversation: reply }, messageTimestamp: Date.now() / 1000 });
+    void persistStore();
+    void persistHubStateDb().catch(error => console.error("Falha ao salvar confirmação de recebimento de comprovante:", error.message));
+  } catch (error) {
+    console.error("Não foi possível confirmar recebimento do comprovante:", error.message);
+  }
+}
+
 function syncLeadFromOutbound(jid) {
   if (typeof jid !== "string" || !jid.endsWith("@s.whatsapp.net")) return;
   const digits = jid.split("@")[0].replace(/\D/g, "");
@@ -658,6 +689,74 @@ app.post("/webhooks/mercadopago", async (req, res) => {
 });
 
 app.use("/api", requireAuth);
+
+app.post("/api/payments/pix-charge", async (req, res) => {
+  if (!PIX_KEY || !PIX_HOLDER) return res.status(503).json({ error: "Configure PIX_KEY e PIX_HOLDER nas variáveis do serviço antes de cobrar por Pix." });
+  const leadId = typeof req.body?.leadId === "string" ? req.body.leadId.trim() : "";
+  const lead = hubState.leads.find(item => item.id === leadId);
+  if (!lead) return res.status(404).json({ error: "Empresa não encontrada no núcleo central." });
+  if (!["Proposta enviada", "Aguardando pagamento"].includes(lead.stage)) return res.status(409).json({ error: "Registre a proposta enviada antes de cobrar." });
+  if (["Pago", "Site entregue"].includes(lead.stage) || lead.paymentStatus === "approved") return res.status(409).json({ error: "Este projeto já está marcado como pago." });
+  if (lead.consent !== true || !safeString(lead.consentEvidence, 500).trim() || lead.doNotContact || lead.stage === "Sem interesse") return res.status(403).json({ error: "Registre autorização válida para contato antes de enviar a cobrança pelo WhatsApp." });
+  const digits = String(lead.whatsapp || "").replace(/\D/g, "");
+  if (digits.length < 12 || digits.length > 15) return res.status(400).json({ error: "Cadastre um número de WhatsApp confirmado, com código do país e DDD." });
+  if (!connected || !sock) return res.status(409).json({ error: "WhatsApp não conectado. Conecte pelo QR Code antes de enviar a cobrança." });
+  const price = getPackagePrice(lead.packageKey);
+  if (price === null) return res.status(400).json({ error: "Selecione um pacote válido antes de gerar a cobrança." });
+  const chatId = digits + "@s.whatsapp.net";
+  if (!sendRateLimit(chatId)) return res.status(429).json({ error: "Limite de envio atingido. Aguarde antes de enviar outra mensagem." });
+  try {
+    const message = buildPixChargeMessage({ leadName: safeString(lead.name, 120), packageKey: lead.packageKey, amount: price, pixKey: PIX_KEY, pixHolder: PIX_HOLDER, pixBank: PIX_BANK });
+    const sent = await sock.sendMessage(chatId, { text: message });
+    const now = new Date().toISOString();
+    lead.stage = "Aguardando pagamento";
+    lead.paymentProvider = "pix";
+    lead.paymentStatus = "awaiting_receipt";
+    lead.paymentAmount = price;
+    lead.paymentCurrency = "BRL";
+    lead.paymentRequestedAt = now;
+    lead.paymentReceiptReceivedAt = null;
+    lead.paymentReviewRequired = false;
+    lead.paymentReviewReason = null;
+    lead.paymentId = null;
+    lead.updatedAt = now;
+    cacheMessage(chatId, { key: { id: sent?.key?.id || crypto.randomUUID(), fromMe: true, remoteJid: chatId }, message: { conversation: message }, messageTimestamp: Date.now() / 1000 });
+    await persistStore();
+    await persistHubStateDb();
+    return res.status(200).json({ ok: true, sent: true, paymentStatus: lead.paymentStatus, amount: price, currency: "BRL" });
+  } catch (error) {
+    console.error("Falha ao enviar cobrança Pix:", error.message);
+    return res.status(502).json({ error: "Não foi possível enviar a cobrança Pix pelo WhatsApp." });
+  }
+});
+
+app.post("/api/payments/pix-confirm", async (req, res) => {
+  const leadId = typeof req.body?.leadId === "string" ? req.body.leadId.trim() : "";
+  const evidence = safeString(req.body?.confirmationEvidence, 500).trim();
+  if (req.body?.confirmed !== true || evidence.length < 5) return res.status(400).json({ error: "Confirme o crédito real e registre uma evidência de conferência com pelo menos 5 caracteres." });
+  const lead = hubState.leads.find(item => item.id === leadId);
+  if (!lead) return res.status(404).json({ error: "Empresa não encontrada no núcleo central." });
+  if (lead.paymentProvider !== "pix" || !["awaiting_receipt", "receipt_submitted"].includes(lead.paymentStatus)) return res.status(409).json({ error: "Não há uma cobrança Pix pendente de confirmação para esta empresa." });
+  const now = new Date().toISOString();
+  lead.paymentStatus = "approved";
+  lead.paymentConfirmationMethod = "manual-bank-statement-review";
+  lead.paymentConfirmationEvidence = evidence;
+  lead.paymentApprovedAt = now;
+  lead.paymentReviewRequired = false;
+  lead.paymentReviewReason = null;
+  lead.stage = lead.doNotContact || lead.stage === "Sem interesse" ? "Sem interesse" : "Pago";
+  lead.updatedAt = now;
+  const project = createPaidProjectWorkspace(lead, now);
+  lead.projectId = project.id;
+  try {
+    await persistStore();
+    await persistHubStateDb();
+    return res.json({ ok: true, confirmed: true, leadId: lead.id, projectId: project.id, stage: lead.stage, paymentStatus: lead.paymentStatus });
+  } catch (error) {
+    console.error("Falha ao salvar confirmação Pix:", error.message);
+    return res.status(500).json({ error: "O pagamento foi conferido, mas não foi possível persistir o estado. Tente sincronizar e revisar antes de confirmar novamente." });
+  }
+});
 
 app.post("/api/payments/preference", async (req, res) => {
   if (!MP_ACCESS_TOKEN || !MP_WEBHOOK_SECRET) {

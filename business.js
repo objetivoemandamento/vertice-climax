@@ -59,7 +59,13 @@ function render(){
     stack.append(button("Selecionar demonstração","",()=>selectDemo(l.id)));
     stack.append(button("Editar","",()=>editLead(l.id)));
     if(l.paymentStatus==="approved"&&l.paymentId){const project=hubProjects.find(item=>item.leadId===l.id);stack.append(button(project?"Abrir projeto":"Criar projeto","",()=>{if(project)window.location.href="./index.html?project="+encodeURIComponent(project.id);else void createProjectFromLead(l.id)}));if(project){const ready=project.publicUrl&&project.publishStatus==="ready";const pending=project.vercelDeploymentId&&["queued","initializing","building"].includes(project.publishStatus);stack.append(button(ready?"Abrir site publicado":pending?"Verificar publicação":"Publicar site","",()=>{if(ready){window.open(project.publicUrl,"_blank","noopener,noreferrer");return}if(pending){void checkClientSiteStatus(project.id,l.id);return}void publishClientSite(project.id,l.id)}));}}
-    if(["Proposta enviada","Aguardando pagamento"].includes(l.stage)&&l.packageKey){stack.append(button("Gerar link de pagamento","",()=>createPaymentLink(l.id)));}
+    if(["Proposta enviada","Aguardando pagamento"].includes(l.stage)&&l.packageKey){
+      stack.append(button("Cobrar via Pix","",()=>createPixCharge(l.id)));
+      stack.append(button("Gerar link de pagamento","",()=>createPaymentLink(l.id)));
+    }
+    if(l.paymentProvider==="pix"&&["awaiting_receipt","receipt_submitted"].includes(l.paymentStatus)){
+      stack.append(button(l.paymentStatus==="receipt_submitted"?"Conferir Pix recebido":"Confirmar Pix no extrato","",()=>confirmPixReceived(l.id)));
+    }
     stack.append(button("Abrir Maps","",()=>openMaps(l)));
     if(l.consent&&l.consentEvidence&&!l.doNotContact&&l.stage!=="Sem interesse"&&normalizedPhone(l.whatsapp)){
       const a=element("a","button","Abrir WhatsApp");a.href="https://wa.me/"+normalizedPhone(l.whatsapp);a.target="_blank";a.rel="noopener noreferrer";a.title="Abre o contato; não envia mensagem automaticamente";stack.append(a);
@@ -154,6 +160,35 @@ async function publishClientSite(projectId,leadId){
     if(result.publishStatus==="ready"){window.location.assign(result.publicUrl);}
     else toast("Publicação iniciada. Status do provedor: "+result.publishStatus+". Use Verificar publicação em alguns segundos.");
   }catch(e){toast("Não foi possível publicar: "+e.message)}
+}
+
+async function createPixCharge(id){
+  const lead=leads.find(item=>item.id===id);if(!lead)return;
+  if(!["Proposta enviada","Aguardando pagamento"].includes(lead.stage)){toast("Envie e registre a proposta antes de cobrar.");return}
+  if(!lead.packageKey){toast("Selecione o pacote antes de gerar a cobrança.");return}
+  if(!lead.consent||!lead.consentEvidence||lead.doNotContact||lead.stage==="Sem interesse"){toast("Registre autorização válida de contato antes de enviar a cobrança pelo WhatsApp.");return}
+  if(!normalizedPhone(lead.whatsapp)){toast("Cadastre o WhatsApp confirmado com código do país e DDD.");return}
+  if(!sessionStorage.getItem(AGENT_TOKEN_KEY)){toast("Conecte o núcleo central para enviar a cobrança Pix.");return}
+  if(!confirm("Enviar a chave Pix e solicitar comprovante a "+lead.name+" no WhatsApp? Valor: "+packageLabel(lead.packageKey)+". A cobrança só será enviada se a chave Pix estiver configurada no serviço."))return;
+  try{
+    const result=await agentRequest("/api/payments/pix-charge",{method:"POST",body:JSON.stringify({leadId:lead.id,approved:true})});
+    if(!result.sent)throw Error("O serviço não confirmou o envio da cobrança.");
+    lead.stage="Aguardando pagamento";lead.paymentProvider="pix";lead.paymentStatus="awaiting_receipt";lead.paymentAmount=result.amount;lead.paymentCurrency="BRL";lead.updatedAt=new Date().toISOString();
+    persist();render();toast("Cobrança Pix enviada. O projeto só será liberado após a confirmação do crédito.");
+  }catch(e){toast("Não foi possível cobrar via Pix: "+e.message)}
+}
+async function confirmPixReceived(id){
+  const lead=leads.find(item=>item.id===id);if(!lead)return;
+  if(lead.paymentProvider!=="pix"||!["awaiting_receipt","receipt_submitted"].includes(lead.paymentStatus)){toast("Não há cobrança Pix pendente para confirmar.");return}
+  const evidence=prompt("Confirme somente depois de conferir o crédito no extrato bancário. Registre a evidência, por exemplo: data, valor e referência da transação.");
+  if(evidence===null)return;
+  if(evidence.trim().length<5){toast("Informe uma evidência de conferência com pelo menos 5 caracteres.");return}
+  if(!confirm("Você verificou o crédito real no extrato e confirmou o valor de "+packageLabel(lead.packageKey)+" para "+lead.name+"? Somente confirme se o dinheiro entrou na conta."))return;
+  try{
+    const result=await agentRequest("/api/payments/pix-confirm",{method:"POST",body:JSON.stringify({leadId:lead.id,confirmed:true,confirmationEvidence:evidence.trim()})});
+    lead.paymentProvider="pix";lead.paymentStatus="approved";lead.paymentConfirmationEvidence=evidence.trim();lead.paymentApprovedAt=new Date().toISOString();lead.paymentReviewRequired=false;lead.paymentReviewReason=null;lead.stage=lead.doNotContact?"Sem interesse":"Pago";lead.projectId=result.projectId;lead.updatedAt=new Date().toISOString();
+    persist();render();await syncHubState(true);toast("Pix confirmado e projeto criado no núcleo central.");
+  }catch(e){toast("Não foi possível confirmar o Pix: "+e.message)}
 }
 
 async function createPaymentLink(id){
