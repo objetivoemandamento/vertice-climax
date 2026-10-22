@@ -1,12 +1,55 @@
 <!doctype html>
-<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0d1117"><title>Vértice Climax — AI Code Studio</title><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material-darker.min.css"><link rel="stylesheet" href="./style.css"><script defer src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script><script defer src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script><script defer src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/xml/xml.min.js"></script><script defer src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script><script defer src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/css/css.min.js"></script><script defer src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/htmlmixed/htmlmixed.min.js"></script><script defer src="./app.js"></script></head>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0b1020">
+<meta name="description" content="Vértice — assistente de IA modular com plugins ZIP e voz multilíngue.">
+<title>Vértice — Assistente modular</title>
+<link rel="preload" href="./background.svg" as="image" type="image/svg+xml">
+<link rel="stylesheet" href="./style.css">
+<script defer src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script defer src="./app.js"></script>
+</head>
 <body>
-<header class="topbar"><a class="brand" href="./index.html"><span class="logo">▲</span><span>Vértice <b>Climax</b><small>AI CODE STUDIO</small></span></a><nav><a class="button" href="./business.html">Painel Comercial</a><a class="button" href="./whatsapp.html">WhatsApp Web ↗</a><button class="button" id="settings-open">Configurações</button><button class="button primary" id="download-project">⇩ Exportar ZIP</button></nav></header>
-<section class="hero"><span class="eyebrow">SEU AMBIENTE DE CRIAÇÃO</span><h1>Transforme ideias em <em>software real.</em></h1><p>Descreva o que deseja construir. A IA gera e atualiza arquivos, corrige erros de formato e mostra uma prévia responsiva.</p></section>
-<main class="workspace">
-<aside class="panel files"><header><span>WORKSPACE</span><h2>Arquivos <small id="file-count">0</small></h2><div class="file-actions"><button class="button" id="new-file">＋ Arquivo</button><button class="button" id="delete-file">Excluir</button></div></header><div id="file-tree"></div><label class="editor-label" for="file-editor">Editor do arquivo selecionado</label><textarea id="file-editor" spellcheck="false" aria-label="Editor de código"></textarea><div class="file-actions"><button class="button primary" id="save-file">Salvar edição</button></div><footer id="save-state">Workspace salvo neste navegador</footer></aside>
-<section class="panel chat"><header><span>VÉRTICE AI</span><h2>Construtor <select id="model-select"><option value="gpt-4o-mini">GPT-4o mini</option><option value="gpt-4o">GPT-4o</option><option value="gpt-4.1-mini">GPT-4.1 mini</option></select></h2></header><div id="chat-messages" class="messages"><div class="msg"><b>Vértice Climax · AGENTE</b><p>Olá! Posso criar sites, interfaces, APIs, mapas Leaflet/OpenStreetMap, formulários e ferramentas. Descreva o que precisa; os arquivos serão exibidos no workspace e na prévia.</p><button class="suggestion">Crie uma landing page premium responsiva com CTA de WhatsApp.</button><button class="suggestion">Crie um mapa Leaflet com busca de endereço, marcadores e popups.</button><button class="suggestion">Revise todos os arquivos e corrija bugs de sintaxe e referências.</button></div></div><form id="prompt-form"><textarea id="prompt-input" rows="3" placeholder="Descreva o projeto, recurso ou correção..." required></textarea><div class="form-bottom"><small id="api-status">Configure a chave OpenAI</small><button class="button primary" id="send-button">Enviar ↑</button></div></form><small class="privacy">A chave fica neste navegador e é enviada diretamente à API OpenAI. Não compartilhe este navegador.</small></section>
-<section class="panel preview"><header><span>LIVE PREVIEW</span><h2>Pré-visualização <span><button id="refresh-preview" title="Atualizar">↻</button><button id="open-preview" title="Abrir em nova aba">↗</button></span></h2><div class="devices"><button data-device="100%">Desktop</button><button data-device="768px">Tablet</button><button data-device="390px">Mobile</button></div></header><div class="browser"><div class="browserbar">● ● ● <span>prévia isolada</span></div><iframe id="preview-frame" title="Pré-visualização do projeto" sandbox="allow-scripts allow-forms allow-popups allow-modals"></iframe></div><footer id="preview-file-label">index.html · prévia</footer></section>
+<div class="backdrop" aria-hidden="true"></div>
+<header class="topbar">
+  <a class="brand" href="./" aria-label="Vértice início"><span class="mark">V</span><span>Vértice<small>AI WORKSPACE</small></span></a>
+  <nav><span id="connection" class="connection">Configure sua API</span><button class="icon-button" id="settings-open" aria-label="Configurações">⚙</button></nav>
+</header>
+<main class="layout">
+  <aside class="sidebar">
+    <button id="new-chat" class="new-chat">＋ <span>Novo chat</span></button>
+    <section class="plugin-area">
+      <div class="section-title"><span>PLUGINS</span><span id="plugin-count">0</span></div>
+      <label class="upload" for="plugin-file">＋ Instalar ZIP</label>
+      <input id="plugin-file" type="file" accept=".zip,application/zip" hidden>
+      <p class="hint">Plugins adicionam instruções e ferramentas declarativas. Código do ZIP nunca é executado.</p>
+      <ul id="plugins" class="plugin-list"><li class="empty">Nenhum plugin instalado</li></ul>
+    </section>
+    <div class="sidebar-foot">Leve por padrão · sem rastreamento</div>
+  </aside>
+  <section class="chat-panel">
+    <div class="chat-head"><div><span class="eyebrow">ASSISTENTE MODULAR</span><h1>O que vamos criar?</h1><p>Converse, envie um plugin ZIP ou dite sua ideia.</p></div><label class="language">Idioma <select id="language" aria-label="Idioma da conversa"><option value="pt-BR" selected>Português</option><option value="en-US">English</option><option value="zh-CN">中文</option><option value="es-ES">Español</option><option value="hi-IN">हिन्दी</option></select></label></div>
+    <div id="messages" class="messages" aria-live="polite"><div class="welcome"><div class="welcome-mark">✳</div><h2>Seu espaço, suas capacidades.</h2><p>Instale um plugin ZIP para especializar a IA. Texto e voz funcionam no idioma selecionado.</p><div class="chips"><button class="chip">Explique como instalar um plugin</button><button class="chip">Ajude-me a organizar uma ideia</button></div></div></div>
+    <div class="composer-wrap">
+      <form id="composer" class="composer">
+        <textarea id="prompt" rows="1" maxlength="12000" placeholder="Escreva sua mensagem…" aria-label="Mensagem" required></textarea>
+        <div class="composer-tools"><div class="left-tools"><button type="button" id="voice" class="tool-button" title="Ditado por voz" aria-label="Iniciar ditado">🎙 <span>Falar</span></button><label class="tool-button attach" for="chat-file" title="Anexar arquivo">＋ <span>Anexar</span></label><input id="chat-file" type="file" multiple hidden><span id="attachment-name" class="attachment-name"></span></div><button id="send" class="send" aria-label="Enviar mensagem">↑</button></div>
+      </form>
+      <p class="disclaimer">A chave da API fica neste navegador. Revise a política do provedor antes de enviar dados.</p>
+    </div>
+  </section>
 </main>
-<div class="modal hidden" id="settings-modal"><section><button id="settings-close" class="close" type="button">×</button><span class="eyebrow">PREFERÊNCIAS</span><h2>Configurações</h2><label for="api-key-input">Chave de API OpenAI</label><input id="api-key-input" type="password" autocomplete="off" placeholder="sk-..."><p class="hint">A chave OpenAI é armazenada apenas neste navegador. Nunca a compartilhe.</p><label for="hub-url-input">URL do núcleo Vértice</label><input id="hub-url-input" type="url" autocomplete="url" placeholder="https://vertice-climax-whatsapp.onrender.com"><label for="hub-token-input">Token do núcleo Vértice</label><input id="hub-token-input" type="password" autocomplete="off" placeholder="Token do serviço"><p class="hint">Use o mesmo token do painel comercial. Ele fica apenas na sessão do navegador. O núcleo sincroniza leads, projetos e arquivos do Studio quando o serviço está acessível.</p><button class="button primary wide" id="settings-save">Salvar configurações</button><button class="button wide" id="hub-sync-studio">Sincronizar workspace com o núcleo</button><p class="hint" id="hub-sync-status" role="status">Workspace salvo localmente.</p><button class="button wide" id="clear-workspace">Limpar workspace local</button></section></div><div id="toast" class="toast" role="status" aria-live="polite"></div>
-</body></html>
+<dialog id="settings">
+  <form method="dialog" class="settings-card">
+    <button class="close" aria-label="Fechar">×</button><span class="eyebrow">CONFIGURAÇÃO LOCAL</span><h2>Conecte seu modelo</h2>
+    <label for="api-key">Chave da API OpenAI</label><input id="api-key" type="password" autocomplete="off" placeholder="sk-…" spellcheck="false">
+    <label for="model">Modelo</label><input id="model" value="gpt-4o-mini" maxlength="80">
+    <p class="hint">A chave é salva apenas no armazenamento local deste navegador e enviada diretamente à API configurada.</p>
+    <div class="settings-actions"><button type="button" id="forget-key" class="secondary">Apagar chave</button><button id="save-settings" class="send">Salvar</button></div>
+  </form>
+</dialog>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
