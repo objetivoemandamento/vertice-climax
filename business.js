@@ -323,7 +323,7 @@ async function checkAgentHealth(){
   try{const d=await agentRequest("/api/status");const wa=d.connected?"WhatsApp conectado. Agente: "+(d.automationEnabled?"ativo":"desativado")+".":"Serviço acessível; WhatsApp ainda não conectado.";const payments=d.paymentIntegrationConfigured?"Mercado Pago configurado.":"Mercado Pago pendente de credenciais no backend.";const persistence=d.whatsappAuthPersistence==="supabase-encrypted"?"Persistência criptografada configurada.":"Sessão apenas local; reinícios podem exigir novo pareamento.";const publishing=d.websitePublishingConfigured?"Publicação Vercel configurada.":"Publicação Vercel pendente de token no backend.";status.textContent=[wa,payments,persistence,publishing].join(" ")}
   catch(e){status.textContent="Conexão não validada: "+e.message}
 }
-async async function registerLeadWithAgent(id){
+async function registerLeadWithAgent(id){
   const lead=leads.find(l=>l.id===id);if(!lead)return;
   if(!lead.consent||!lead.consentEvidence||lead.doNotContact||lead.stage==="Sem interesse"){toast("É necessário consentimento registrado e ausência de recusa.");return}
   const digits=normalizedPhone(lead.whatsapp);
