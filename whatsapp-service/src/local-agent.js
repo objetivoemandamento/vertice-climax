@@ -18,7 +18,7 @@ export function classifyIncomingMessage(messageText, currentStage = "inicio", co
     return { action: "human_review", stage: currentStage, reason: "O contato perguntou a origem dos dados; verificar a fonte real registrada antes de responder." };
   }
 
-  if (/\b(contratar|quero fechar|pode cobrar|confirmo a contratacao|confirmo a contratação|pode enviar o pix|manda o pix|quero contratar)\b/.test(text)) {
+  if ((context.packageKey && /^(sim|isso|pode|confirmo|fechado|vamos|pode ser|tudo bem|ok)$/.test(text)) || /\b(contratar|quero fechar|pode cobrar|confirmo a contratacao|pode enviar o pix|manda o pix|quero contratar)\b/.test(text)) {
     if (!context.packageKey) return { action: "reply", stage: "Interessado", reply: "Claro. Qual opção faz mais sentido para o que você precisa: Avançado (R$ 2.000), Médio (R$ 700) ou Básico (R$ 300)? Posso explicar as diferenças antes de você decidir." };
     return { action: "confirm_purchase", stage: "Proposta enviada", packageKey: context.packageKey, reason: "O cliente confirmou explicitamente que deseja contratar." };
   }
