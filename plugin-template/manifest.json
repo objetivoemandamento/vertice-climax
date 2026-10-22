@@ -1,0 +1,35 @@
+{
+  "id": "guia-exemplo",
+  "name": "Guia de exemplo",
+  "version": "1.0.0",
+  "description": "Mostra como um ZIP pode ensinar e estender o assistente.",
+  "tools": [
+    {
+      "name": "search_plugin_guide",
+      "description": "Busca uma palavra ou tema nos arquivos de referência deste plugin.",
+      "action": "search_plugin",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string", "description": "Termo para localizar nos arquivos" }
+        },
+        "required": ["query"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "save_plugin_note",
+      "description": "Salva uma nota local solicitada pelo usuário.",
+      "action": "save_note",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string" },
+          "content": { "type": "string" }
+        },
+        "required": ["title", "content"],
+        "additionalProperties": false
+      }
+    }
+  ]
+}
