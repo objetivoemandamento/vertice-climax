@@ -467,7 +467,7 @@ async function processIncomingAutomation(jid, message) {
   while (processedAutoMessageIds.size > 2000) processedAutoMessageIds.delete(processedAutoMessageIds.values().next().value);
   const leadDigits = jid.split("@")[0].replace(/\D/g, "");
   const lead = hubState.leads.find(item => String(item.whatsapp || "").replace(/\D/g, "") === leadDigits);
-  const decision = classifyIncomingMessage(text, contact.stage || "inicio", { packageKey: contact.packageKey || lead?.packageKey || null });
+  const decision = classifyIncomingMessage(text, contact.stage || "inicio", { packageKey: contact.packageChosenByClient === true ? contact.packageKey : null });
   contact.lastInboundAt = Date.now();
   contact.lastReason = decision.reason || null;
   contact.stage = decision.stage || contact.stage || "inicio";
@@ -477,7 +477,8 @@ async function processIncomingAutomation(jid, message) {
     lead.stage = "Interessado";
     lead.updatedAt = new Date().toISOString();
     contact.packageKey = decision.packageKey;
-    contact.stage = "Interessado";
+    contact.packageChosenByClient = true;
+    contact.stage = "Aguardando confirmação da proposta";
   }
   if (decision.action === "confirm_purchase") {
     if (!lead || lead.consent !== true || !lead.consentEvidence || lead.doNotContact || !lead.packageKey || !PIX_KEY || !PIX_HOLDER) {
@@ -1158,7 +1159,7 @@ app.post("/api/automation/start-outreach", async (req, res) => {
   try {
     const sent = await sock.sendMessage(chatId, { text: opener });
     const old = automationContacts.get(chatId) || {};
-    automationContacts.set(chatId, { ...old, chatId, name: safeString(lead.name, 120), leadId: lead.id, consent: true, consentEvidence: safeString(lead.consentEvidence, 500), enabled: true, stage: "abordagem", packageKey: lead.packageKey || null, updatedAt: Date.now(), needsHuman: false });
+    automationContacts.set(chatId, { ...old, chatId, name: safeString(lead.name, 120), leadId: lead.id, consent: true, consentEvidence: safeString(lead.consentEvidence, 500), enabled: true, stage: "abordagem", packageKey: null, packageChosenByClient: false, updatedAt: Date.now(), needsHuman: false });
     automationEnabled = true;
     lead.stage = "Em conversa";
     lead.firstOutreachAt = new Date().toISOString();
